@@ -3,11 +3,9 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Icon from '@/components/ui/AppIcon';
 import StatusBadge from '@/components/ui/StatusBadge';
 import SyncStatusBadge from '@/components/ui/SyncStatusBadge';
-import InspectionFormModal from './InspectionFormModal';
 import PdfGenerationModal from './PdfGenerationModal';
 import { toast } from 'sonner';
 import { InspectionsRepo } from '@/lib/repositories';
-import { migrateLegacyInspections } from '../../../lib/inspectionMigration';
 import { toInspectionView, type InspectionView } from '@/lib/inspectionView';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetworkSync } from '@/hooks/useNetworkSync';
@@ -354,8 +352,6 @@ export default function InspectionListView() {
   const { isOnline, pendingCount, pendingMediaCount, isSyncing, syncStatus, runSync } = useNetworkSync();
   const [inspections, setInspections] = useState<InspectionView[]>([]);
   const [search, setSearch] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [showAuditId, setShowAuditId] = useState<string | null>(null);
   const [pdfProgress, setPdfProgress] = useState<PDFGenerationProgress | null>(null);
@@ -367,7 +363,6 @@ export default function InspectionListView() {
   const [serverPdfLoadingId, setServerPdfLoadingId] = useState<string | null>(null);
 
   const loadInspections = useCallback(async () => {
-    await migrateLegacyInspections();
     const views = (await InspectionsRepo.getAll()).map(toInspectionView);
     // The audit history remains in Supabase and is written by database
     // triggers/RPCs. It is intentionally not fetched here: the deployed
@@ -381,12 +376,6 @@ export default function InspectionListView() {
     window.addEventListener('gv-sync-complete', loadInspections);
     return () => window.removeEventListener('gv-sync-complete', loadInspections);
   }, [loadInspections]);
-
-  const handleFormClose = () => {
-    setShowForm(false);
-    setEditingId(null);
-    loadInspections();
-  };
 
   const handleDelete = async (id: string, placa: string) => {
     if (!confirm(`¿Eliminar inspección de ${placa}? Esta acción no se puede deshacer.`)) return;
@@ -674,13 +663,10 @@ export default function InspectionListView() {
                 </button>
             )}
           </div>
-          <button
-              onClick={() => { setEditingId(null); setShowForm(true); }}
-              className="btn-primary flex items-center gap-2 whitespace-nowrap"
-          >
+          <div className="flex items-center gap-2">
             <Icon name="PlusIcon" size={18} className="text-white" />
             <span className="hidden sm:inline">Nueva</span>
-          </button>
+          </div>
         </div>
 
         {/* Filter tabs */}
@@ -710,9 +696,7 @@ export default function InspectionListView() {
                   {search ? 'Intente con otro término de búsqueda' : 'Crea una nueva inspección para comenzar'}
                 </p>
                 {!search && (
-                    <button onClick={() => setShowForm(true)} className="btn-primary mt-4 mx-auto">
-                      Nueva Inspección
-                    </button>
+                    <p className="text-sm text-gray-400 mt-4">Crea una nueva inspección para comenzar</p>
                 )}
               </div>
           )}
@@ -841,13 +825,10 @@ export default function InspectionListView() {
                 </div>
 
                 <div className="flex gap-2 mt-3 flex-wrap">
-                  <button
-                      onClick={() => { setEditingId(insp.id); setShowForm(true); }}
-                      className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#1B4F72] text-white text-sm font-semibold active:scale-95 transition-all min-w-0"
-                  >
+                  <div className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#1B4F72] text-white text-sm font-semibold min-w-0 opacity-50 cursor-not-allowed">
                     <Icon name={insp.isLocked || insp.status === 'archivado' ? 'EyeIcon' : 'PencilSquareIcon'} size={16} className="text-white" />
                     {insp.isLocked || insp.status === 'archivado' ? 'Ver' : insp.status === 'aprobado' ? 'Ver' : 'Continuar'}
-                  </button>
+                  </div>
 
                   {/* Admin: Approve/Reject for pending review */}
                   {isAdmin && insp.status === 'pendiente_revision' && (
@@ -935,13 +916,6 @@ export default function InspectionListView() {
               </div>
           ))}
         </div>
-
-        {showForm && (
-            <InspectionFormModal
-                inspectionId={editingId}
-                onClose={handleFormClose}
-            />
-        )}
       </div>
   );
 }

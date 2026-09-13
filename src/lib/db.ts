@@ -218,3 +218,49 @@ export async function setLastSync(tableName: string, timestamp: number): Promise
     // silently fail
   }
 }
+
+// ─── PO Type Interfaces ───────────────────────────────────────────────────────
+
+export interface DBPOCliente {
+  id: string;
+  nombre: string;
+  pais?: string;
+  activo?: boolean;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
+export interface DBPOCatalogItem {
+  id: string;
+  nombre: string;
+  codigo?: string;
+  abreviatura?: string;
+  orden?: number;
+  activo?: boolean;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
+export interface DBPOPiezaVidrio {
+  id: string;
+  nombre: string;
+  codigo?: string;
+  activo?: boolean;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
+function DBProductionOrder(...args: any[]): any {
+  // eslint-disable-next-line no-console
+  console.warn('Placeholder: DBProductionOrder is not implemented yet.', args);
+  return null;
+}
+
+export { DBProductionOrder };
+function DBProductionOrderItem(...args: any[]): any {
+  // eslint-disable-next-line no-console
+  console.warn('Placeholder: DBProductionOrderItem is not implemented yet.', args);
+  return null;
+}
+
+export { DBProductionOrderItem };

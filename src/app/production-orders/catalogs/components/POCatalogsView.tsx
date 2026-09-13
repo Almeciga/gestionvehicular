@@ -38,7 +38,7 @@ interface EditState {
 const EMPTY_EDIT: EditState = { nombre: '', activo: true };
 
 export default function POCatalogsView() {
-  const { isAdmin, isComercial, loading: authLoading } = useAuth();
+  const { isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -57,10 +57,10 @@ export default function POCatalogsView() {
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    if (!authLoading && !isAdmin && !isComercial) {
+    if (!authLoading && !isAdmin) {
       router.replace('/production-orders');
     }
-  }, [authLoading, isAdmin, isComercial, router]);
+  }, [authLoading, isAdmin, router]);
 
   const loadAll = async () => {
     setLoading(true);
@@ -101,11 +101,11 @@ export default function POCatalogsView() {
   };
 
   useEffect(() => {
-    if (!authLoading && (isAdmin || isComercial)) {
+    if (!authLoading && isAdmin) {
       loadAll();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, isAdmin, isComercial]);
+  }, [authLoading, isAdmin]);
 
   const getCurrentItems = (): (DBPOCliente | DBPOCatalogItem | DBPOPiezaVidrio)[] => {
     const q = search.toLowerCase();
@@ -230,7 +230,7 @@ export default function POCatalogsView() {
     );
   }
 
-  if (!isAdmin && !isComercial) return null;
+  if (!isAdmin) return null;
 
   return (
     <div className="px-4 py-4 max-w-screen-2xl mx-auto">
