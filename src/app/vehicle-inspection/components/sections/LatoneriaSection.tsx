@@ -18,7 +18,7 @@ interface DamageEntry {
   timestamp: string;
   inspectorId?: string;
   view: VehicleView;
-  x: number; // percentage within SVG
+  x: number;
   y: number;
 }
 
@@ -41,47 +41,79 @@ const DAMAGE_CONFIG: Record<NonNullable<DanoTipo>, { label: string; color: strin
 };
 
 const VIEWS: { id: VehicleView; label: string }[] = [
-  { id: 'superior',    label: 'Vista Superior' },
-  { id: 'lateral-izq', label: 'Lateral Izquierdo' },
-  { id: 'lateral-der', label: 'Lateral Derecho' },
-  { id: 'frontal',     label: 'Frontal' },
-  { id: 'trasera',     label: 'Trasera' },
+  { id: 'superior',     label: 'Vista Superior' },
+  { id: 'lateral-izq',  label: 'Lateral Izquierdo' },
+  { id: 'lateral-der',  label: 'Lateral Derecho' },
+  { id: 'frontal',      label: 'Frontal' },
+  { id: 'trasera',      label: 'Trasera' },
 ];
 
-// ─── SVG Vehicle Diagrams ─────────────────────────────────────────────────────
+// ─── SVG Vehicle Diagrams (Realistic) ────────────────────────────────────────
 
 function TopViewSVG() {
   return (
     <svg viewBox="0 0 220 380" className="w-full h-full" style={{ maxHeight: 340 }}>
-      {/* Body */}
-      <rect x="40" y="30" width="140" height="320" rx="30" fill="#f8fafc" stroke="#94a3b8" strokeWidth="2"/>
-      {/* Windshield front */}
-      <ellipse cx="110" cy="80" rx="52" ry="22" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="1.5"/>
-      {/* Windshield rear */}
-      <ellipse cx="110" cy="300" rx="52" ry="22" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="1.5"/>
-      {/* Roof panel */}
-      <rect x="55" y="110" width="110" height="160" rx="8" fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="1.5"/>
-      {/* Hood */}
-      <rect x="50" y="40" width="120" height="55" rx="12" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.5"/>
-      {/* Trunk */}
-      <rect x="50" y="285" width="120" height="55" rx="12" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.5"/>
-      {/* Left doors */}
-      <rect x="30" y="120" width="28" height="65" rx="4" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="1.5"/>
-      <rect x="30" y="195" width="28" height="65" rx="4" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="1.5"/>
-      {/* Right doors */}
-      <rect x="162" y="120" width="28" height="65" rx="4" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="1.5"/>
-      <rect x="162" y="195" width="28" height="65" rx="4" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="1.5"/>
+      <defs>
+        <linearGradient id="bodyGradTop" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#e2e8f0" />
+          <stop offset="50%" stopColor="#f8fafc" />
+          <stop offset="100%" stopColor="#e2e8f0" />
+        </linearGradient>
+        <linearGradient id="glassGradTop" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#bae6fd" />
+          <stop offset="100%" stopColor="#7dd3fc" />
+        </linearGradient>
+        <linearGradient id="roofGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#f1f5f9" />
+          <stop offset="100%" stopColor="#cbd5e1" />
+        </linearGradient>
+        <linearGradient id="hoodGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#f8fafc" />
+          <stop offset="100%" stopColor="#e2e8f0" />
+        </linearGradient>
+      </defs>
+      {/* Shadow */}
+      <ellipse cx="110" cy="370" rx="80" ry="10" fill="#00000015" />
+      {/* Main body silhouette */}
+      <path d="M45 30 Q35 30 30 50 L25 80 Q22 180 30 340 Q35 350 50 350 L170 350 Q185 350 190 340 Q198 180 195 80 L190 50 Q185 30 175 30 Z" fill="url(#bodyGradTop)" stroke="#94a3b8" strokeWidth="1.8" />
+      {/* Body contour line */}
+      <path d="M40 35 Q30 35 28 55 L23 85 Q20 185 28 340 Q33 348 45 348 L175 348 Q187 348 192 340 Q200 185 197 85 L192 55 Q187 35 180 35" fill="none" stroke="#64748b" strokeWidth="0.8" opacity="0.4" />
+      {/* Front windshield */}
+      <path d="M62 78 Q60 65 80 55 L140 55 Q160 65 158 78 Q140 98 80 98 Z" fill="url(#glassGradTop)" stroke="#38bdf8" strokeWidth="1.2" />
+      {/* Rear windshield */}
+      <path d="M62 282 Q60 295 80 305 L140 305 Q160 295 158 282 Q140 262 80 262 Z" fill="url(#glassGradTop)" stroke="#38bdf8" strokeWidth="1.2" />
+      {/* Roof panel with sunroof */}
+      <path d="M58 105 L58 255 Q58 265 110 265 Q162 265 162 255 L162 105 Q162 95 110 95 Q58 95 58 105 Z" fill="url(#roofGrad)" stroke="#94a3b8" strokeWidth="1.2" />
+      {/* Sunroof */}
+      <path d="M85 115 L85 245 Q85 250 110 250 Q135 250 135 245 L135 115 Q135 110 110 110 Q85 110 85 115 Z" fill="#e0e7ff" stroke="#a5b4fc" strokeWidth="0.8" opacity="0.6" />
+      {/* Hood center line */}
+      <line x1="110" y1="38" x2="110" y2="82" stroke="#94a3b8" strokeWidth="0.6" opacity="0.5" />
+      {/* Left mirror */}
+      <path d="M32 128 Q28 125 26 120 L24 115 Q28 112 34 115 L36 125 Z" fill="#64748b" stroke="#475569" strokeWidth="0.8" />
+      {/* Right mirror */}
+      <path d="M188 128 Q192 125 194 120 L196 115 Q192 112 186 115 L184 125 Z" fill="#64748b" stroke="#475569" strokeWidth="0.8" />
       {/* Wheels */}
-      <rect x="14" y="60" width="26" height="50" rx="8" fill="#374151" stroke="#1f2937" strokeWidth="1"/>
-      <rect x="180" y="60" width="26" height="50" rx="8" fill="#374151" stroke="#1f2937" strokeWidth="1"/>
-      <rect x="14" y="270" width="26" height="50" rx="8" fill="#374151" stroke="#1f2937" strokeWidth="1"/>
-      <rect x="180" y="270" width="26" height="50" rx="8" fill="#374151" stroke="#1f2937" strokeWidth="1"/>
-      {/* Center line */}
-      <line x1="110" y1="40" x2="110" y2="340" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="6,4"/>
-      {/* Mirror left */}
-      <ellipse cx="28" cy="130" rx="8" ry="5" fill="#94a3b8" stroke="#64748b" strokeWidth="1"/>
-      {/* Mirror right */}
-      <ellipse cx="192" cy="130" rx="8" ry="5" fill="#94a3b8" stroke="#64748b" strokeWidth="1"/>
+      <g>
+        {/* Front left */}
+        <rect x="16" y="60" width="22" height="48" rx="10" fill="#1e293b" stroke="#0f172a" strokeWidth="1.2" />
+        <rect x="18" y="62" width="18" height="44" rx="8" fill="#334155" stroke="#1e293b" strokeWidth="0.5" />
+        <ellipse cx="27" cy="84" rx="10" ry="12" fill="#475569" opacity="0.5" />
+        {/* Front right */}
+        <rect x="182" y="60" width="22" height="48" rx="10" fill="#1e293b" stroke="#0f172a" strokeWidth="1.2" />
+        <rect x="184" y="62" width="18" height="44" rx="8" fill="#334155" stroke="#1e293b" strokeWidth="0.5" />
+        <ellipse cx="193" cy="84" rx="10" ry="12" fill="#475569" opacity="0.5" />
+        {/* Rear left */}
+        <rect x="16" y="272" width="22" height="48" rx="10" fill="#1e293b" stroke="#0f172a" strokeWidth="1.2" />
+        <rect x="18" y="274" width="18" height="44" rx="8" fill="#334155" stroke="#1e293b" strokeWidth="0.5" />
+        <ellipse cx="27" cy="296" rx="10" ry="12" fill="#475569" opacity="0.5" />
+        {/* Rear right */}
+        <rect x="182" y="272" width="22" height="48" rx="10" fill="#1e293b" stroke="#0f172a" strokeWidth="1.2" />
+        <rect x="184" y="274" width="18" height="44" rx="8" fill="#334155" stroke="#1e293b" strokeWidth="0.5" />
+        <ellipse cx="193" cy="296" rx="10" ry="12" fill="#475569" opacity="0.5" />
+      </g>
+      {/* Antenna */}
+      <line x1="110" y1="95" x2="110" y2="75" stroke="#64748b" strokeWidth="1" />
+      <circle cx="110" cy="74" r="2" fill="#64748b" />
     </svg>
   );
 }
@@ -89,31 +121,56 @@ function TopViewSVG() {
 function FrontViewSVG() {
   return (
     <svg viewBox="0 0 280 200" className="w-full h-full" style={{ maxHeight: 200 }}>
-      {/* Body */}
-      <path d="M30 160 Q30 80 50 60 L80 40 L200 40 L230 60 Q250 80 250 160 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="2"/>
+      <defs>
+        <linearGradient id="bodyGradFront" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#f1f5f9" />
+          <stop offset="100%" stopColor="#e2e8f0" />
+        </linearGradient>
+        <linearGradient id="glassFront" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#7dd3fc" />
+          <stop offset="100%" stopColor="#38bdf8" />
+        </linearGradient>
+      </defs>
+      {/* Shadow */}
+      <ellipse cx="140" cy="192" rx="100" ry="8" fill="#00000015" />
+      {/* Main body */}
+      <path d="M28 155 Q28 75 55 55 L80 35 L200 35 L225 55 Q252 75 252 155 Q252 170 240 178 L40 178 Q28 170 28 155 Z" fill="url(#bodyGradFront)" stroke="#94a3b8" strokeWidth="2" />
+      {/* Hood curve */}
+      <path d="M55 55 Q55 40 80 35 L200 35 Q225 40 225 55 Q225 70 200 75 L80 75 Q55 70 55 55 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.2" />
       {/* Windshield */}
-      <path d="M75 42 L85 90 L195 90 L205 42 Z" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="1.5"/>
-      {/* Hood */}
-      <path d="M50 160 L55 120 L225 120 L230 160 Z" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="1.5"/>
-      {/* Bumper */}
-      <path d="M35 160 Q35 175 50 180 L230 180 Q245 175 245 160 Z" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.5"/>
-      {/* Headlights */}
-      <path d="M42 130 Q42 115 55 112 L90 112 L90 135 L42 135 Z" fill="#fef9c3" stroke="#eab308" strokeWidth="1.5"/>
-      <path d="M238 130 Q238 115 225 112 L190 112 L190 135 L238 135 Z" fill="#fef9c3" stroke="#eab308" strokeWidth="1.5"/>
-      {/* Grille */}
-      <rect x="95" y="140" width="90" height="30" rx="4" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.5"/>
-      <line x1="110" y1="140" x2="110" y2="170" stroke="#94a3b8" strokeWidth="1"/>
-      <line x1="125" y1="140" x2="125" y2="170" stroke="#94a3b8" strokeWidth="1"/>
-      <line x1="140" y1="140" x2="140" y2="170" stroke="#94a3b8" strokeWidth="1"/>
-      <line x1="155" y1="140" x2="155" y2="170" stroke="#94a3b8" strokeWidth="1"/>
-      <line x1="170" y1="140" x2="170" y2="170" stroke="#94a3b8" strokeWidth="1"/>
-      {/* Wheels */}
-      <ellipse cx="68" cy="180" rx="32" ry="16" fill="#374151" stroke="#1f2937" strokeWidth="1.5"/>
-      <ellipse cx="68" cy="180" rx="20" ry="10" fill="#6b7280" stroke="#374151" strokeWidth="1"/>
-      <ellipse cx="212" cy="180" rx="32" ry="16" fill="#374151" stroke="#1f2937" strokeWidth="1.5"/>
-      <ellipse cx="212" cy="180" rx="20" ry="10" fill="#6b7280" stroke="#374151" strokeWidth="1"/>
+      <path d="M70 36 L80 85 L200 85 L210 36 Q190 32 140 32 Q90 32 70 36 Z" fill="url(#glassFront)" stroke="#38bdf8" strokeWidth="1.5" />
+      {/* A-pillars */}
+      <line x1="70" y1="36" x2="80" y2="85" stroke="#475569" strokeWidth="2.5" />
+      <line x1="210" y1="36" x2="200" y2="85" stroke="#475569" strokeWidth="2.5" />
+      {/* Front grille */}
+      <path d="M95 140 L95 115 Q95 108 105 105 L175 105 Q185 108 185 115 L185 140 Z" fill="#1e293b" stroke="#0f172a" strokeWidth="1.5" />
+      {/* Grille chrome surround */}
+      <path d="M90 140 L90 112 Q90 104 100 102 L180 102 Q190 104 190 112 L190 140" fill="none" stroke="#cbd5e1" strokeWidth="2.5" />
+      {/* Grille bars */}
+      <line x1="100" y1="115" x2="180" y2="115" stroke="#475569" strokeWidth="1.2" />
+      <line x1="100" y1="125" x2="180" y2="125" stroke="#475569" strokeWidth="1.2" />
       {/* Logo */}
-      <circle cx="140" cy="155" r="8" fill="#94a3b8" stroke="#64748b" strokeWidth="1"/>
+      <circle cx="140" cy="120" r="10" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="1.5" />
+      <circle cx="140" cy="120" r="6" fill="#64748b" />
+      {/* Headlights - LED style */}
+      <path d="M38 125 Q38 108 52 102 L85 102 L85 135 L38 135 Z" fill="#fef08a" stroke="#ca8a04" strokeWidth="1.5" />
+      <path d="M45 115 Q45 108 55 105 L78 105 L78 125 L45 125 Z" fill="#f8fafc" opacity="0.7" />
+      <path d="M242 125 Q242 108 228 102 L195 102 L195 135 L242 135 Z" fill="#fef08a" stroke="#ca8a04" strokeWidth="1.5" />
+      <path d="M235 115 Q235 108 225 105 L202 105 L202 125 L235 125 Z" fill="#f8fafc" opacity="0.7" />
+      {/* Lower bumper intake */}
+      <path d="M70 150 L70 160 Q70 168 85 172 L195 172 Q210 168 210 160 L210 150 Z" fill="#1e293b" stroke="#0f172a" strokeWidth="1.2" />
+      {/* Fog lights */}
+      <ellipse cx="65" cy="148" rx="12" ry="6" fill="#fef08a" stroke="#ca8a04" strokeWidth="1" />
+      <ellipse cx="215" cy="148" rx="12" ry="6" fill="#fef08a" stroke="#ca8a04" strokeWidth="1" />
+      {/* Bumper lower edge */}
+      <path d="M30 155 Q30 170 45 178 L235 178 Q250 170 250 155" fill="none" stroke="#64748b" strokeWidth="2" />
+      {/* Wheels */}
+      <ellipse cx="68" cy="178" rx="30" ry="14" fill="#1e293b" stroke="#0f172a" strokeWidth="2" />
+      <ellipse cx="68" cy="178" rx="20" ry="9" fill="#334155" stroke="#1e293b" strokeWidth="1" />
+      <ellipse cx="68" cy="178" rx="8" ry="4" fill="#475569" />
+      <ellipse cx="212" cy="178" rx="30" ry="14" fill="#1e293b" stroke="#0f172a" strokeWidth="2" />
+      <ellipse cx="212" cy="178" rx="20" ry="9" fill="#334155" stroke="#1e293b" strokeWidth="1" />
+      <ellipse cx="212" cy="178" rx="8" ry="4" fill="#475569" />
     </svg>
   );
 }
@@ -121,27 +178,50 @@ function FrontViewSVG() {
 function RearViewSVG() {
   return (
     <svg viewBox="0 0 280 200" className="w-full h-full" style={{ maxHeight: 200 }}>
-      {/* Body */}
-      <path d="M30 160 Q30 80 50 60 L80 40 L200 40 L230 60 Q250 80 250 160 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="2"/>
+      <defs>
+        <linearGradient id="bodyGradRear" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#f1f5f9" />
+          <stop offset="100%" stopColor="#e2e8f0" />
+        </linearGradient>
+        <linearGradient id="glassRear" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#7dd3fc" />
+          <stop offset="100%" stopColor="#38bdf8" />
+        </linearGradient>
+      </defs>
+      {/* Shadow */}
+      <ellipse cx="140" cy="192" rx="100" ry="8" fill="#00000015" />
+      {/* Main body */}
+      <path d="M28 155 Q28 75 55 55 L80 35 L200 35 L225 55 Q252 75 252 155 Q252 170 240 178 L40 178 Q28 170 28 155 Z" fill="url(#bodyGradRear)" stroke="#94a3b8" strokeWidth="2" />
       {/* Rear window */}
-      <path d="M80 42 L88 88 L192 88 L200 42 Z" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="1.5"/>
+      <path d="M75 36 L82 82 L198 82 L205 36 Q190 32 140 32 Q90 32 75 36 Z" fill="url(#glassRear)" stroke="#38bdf8" strokeWidth="1.5" />
+      {/* C-pillars */}
+      <line x1="75" y1="36" x2="82" y2="82" stroke="#475569" strokeWidth="2.5" />
+      <line x1="205" y1="36" x2="198" y2="82" stroke="#475569" strokeWidth="2.5" />
       {/* Trunk lid */}
-      <path d="M55 120 L55 160 L225 160 L225 120 Z" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="1.5"/>
-      {/* Bumper */}
-      <path d="M35 160 Q35 178 50 182 L230 182 Q245 178 245 160 Z" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.5"/>
-      {/* Tail lights */}
-      <path d="M42 130 Q42 115 55 112 L90 112 L90 135 L42 135 Z" fill="#fecaca" stroke="#ef4444" strokeWidth="1.5"/>
-      <path d="M238 130 Q238 115 225 112 L190 112 L190 135 L238 135 Z" fill="#fecaca" stroke="#ef4444" strokeWidth="1.5"/>
+      <path d="M60 85 L60 155 Q60 162 85 168 L195 168 Q220 162 220 155 L220 85 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.2" />
+      <line x1="140" y1="85" x2="140" y2="155" stroke="#cbd5e1" strokeWidth="0.8" />
+      {/* Tail lights - LED style */}
+      <path d="M38 125 Q38 108 52 102 L85 102 L85 135 L38 135 Z" fill="#fca5a5" stroke="#dc2626" strokeWidth="1.5" />
+      <path d="M45 115 Q45 108 55 105 L78 105 L78 125 L45 125 Z" fill="#fecaca" opacity="0.8" />
+      <path d="M242 125 Q242 108 228 102 L195 102 L195 135 L242 135 Z" fill="#fca5a5" stroke="#dc2626" strokeWidth="1.5" />
+      <path d="M235 115 Q235 108 225 105 L202 105 L202 125 L235 125 Z" fill="#fecaca" opacity="0.8" />
       {/* License plate */}
-      <rect x="105" y="162" width="70" height="18" rx="3" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.5"/>
-      {/* Exhaust */}
-      <ellipse cx="90" cy="182" rx="8" ry="4" fill="#6b7280" stroke="#374151" strokeWidth="1"/>
-      <ellipse cx="190" cy="182" rx="8" ry="4" fill="#6b7280" stroke="#374151" strokeWidth="1"/>
+      <rect x="105" y="162" width="70" height="15" rx="3" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.5" />
+      <rect x="110" y="164" width="60" height="11" rx="2" fill="#e2e8f0" />
+      {/* Exhaust pipes */}
+      <ellipse cx="92" cy="180" rx="8" ry="5" fill="#64748b" stroke="#475569" strokeWidth="1.5" />
+      <ellipse cx="92" cy="180" rx="5" ry="3" fill="#1e293b" />
+      <ellipse cx="188" cy="180" rx="8" ry="5" fill="#64748b" stroke="#475569" strokeWidth="1.5" />
+      <ellipse cx="188" cy="180" rx="5" ry="3" fill="#1e293b" />
+      {/* Bumper lower edge */}
+      <path d="M30 155 Q30 172 45 180 L235 180 Q250 172 250 155" fill="none" stroke="#64748b" strokeWidth="2" />
       {/* Wheels */}
-      <ellipse cx="68" cy="182" rx="32" ry="16" fill="#374151" stroke="#1f2937" strokeWidth="1.5"/>
-      <ellipse cx="68" cy="182" rx="20" ry="10" fill="#6b7280" stroke="#374151" strokeWidth="1"/>
-      <ellipse cx="212" cy="182" rx="32" ry="16" fill="#374151" stroke="#1f2937" strokeWidth="1.5"/>
-      <ellipse cx="212" cy="182" rx="20" ry="10" fill="#6b7280" stroke="#374151" strokeWidth="1"/>
+      <ellipse cx="68" cy="180" rx="30" ry="14" fill="#1e293b" stroke="#0f172a" strokeWidth="2" />
+      <ellipse cx="68" cy="180" rx="20" ry="9" fill="#334155" stroke="#1e293b" strokeWidth="1" />
+      <ellipse cx="68" cy="180" rx="8" ry="4" fill="#475569" />
+      <ellipse cx="212" cy="180" rx="30" ry="14" fill="#1e293b" stroke="#0f172a" strokeWidth="2" />
+      <ellipse cx="212" cy="180" rx="20" ry="9" fill="#334155" stroke="#1e293b" strokeWidth="1" />
+      <ellipse cx="212" cy="180" rx="8" ry="4" fill="#475569" />
     </svg>
   );
 }
@@ -149,42 +229,76 @@ function RearViewSVG() {
 function LeftSideViewSVG() {
   return (
     <svg viewBox="0 0 380 220" className="w-full h-full" style={{ maxHeight: 220 }}>
-      {/* Body */}
-      <path d="M30 170 L30 100 Q35 60 80 45 L160 35 L260 38 Q320 42 345 80 L355 170 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="2"/>
+      <defs>
+        <linearGradient id="bodySide" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#f8fafc" />
+          <stop offset="100%" stopColor="#e2e8f0" />
+        </linearGradient>
+        <linearGradient id="glassSide" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#7dd3fc" />
+          <stop offset="100%" stopColor="#38bdf8" />
+        </linearGradient>
+      </defs>
+      {/* Shadow */}
+      <ellipse cx="190" cy="210" rx="160" ry="8" fill="#00000012" />
+      {/* Main body silhouette */}
+      <path d="M25 165 L25 100 Q30 55 80 42 L160 30 L260 35 Q325 40 350 80 L358 165 Q358 175 345 182 L30 182 Q25 175 25 165 Z" fill="url(#bodySide)" stroke="#94a3b8" strokeWidth="1.8" />
+      {/* Body character line */}
+      <path d="M28 150 L160 145 L260 145 L355 150" fill="none" stroke="#94a3b8" strokeWidth="0.8" opacity="0.6" />
+      {/* Lower body line */}
+      <path d="M28 175 L345 175" fill="none" stroke="#64748b" strokeWidth="0.6" opacity="0.4" />
       {/* Windshield */}
-      <path d="M82 46 L70 100 L155 100 L160 38 Z" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="1.5"/>
+      <path d="M80 43 L67 95 L155 95 L162 32 Z" fill="url(#glassSide)" stroke="#38bdf8" strokeWidth="1.2" />
       {/* Rear window */}
-      <path d="M175 38 L175 100 L265 100 L268 42 Z" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="1.5"/>
+      <path d="M175 32 L175 95 L265 95 L275 39 Z" fill="url(#glassSide)" stroke="#38bdf8" strokeWidth="1.2" />
       {/* Roof */}
-      <path d="M80 45 L160 35 L260 38 L268 42 L265 100 L155 100 L70 100 L82 46 Z" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="1.5"/>
+      <path d="M80 43 L160 30 L260 35 L275 39 L265 95 L175 95 L155 95 L67 95 L80 43 Z" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="1.2" />
       {/* Hood */}
-      <path d="M30 100 L30 170 L80 170 L80 100 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.5"/>
+      <path d="M25 100 L25 165 L80 165 L80 100 Q80 70 60 55 Q45 45 25 100 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1" />
       {/* Front door */}
-      <path d="M80 100 L80 165 L175 165 L175 100 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.5"/>
+      <path d="M82 98 L82 162 L175 162 L175 98 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.2" />
+      {/* Front door window */}
+      <path d="M90 100 L88 140 L170 140 L170 100 Z" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="0.8" opacity="0.6" />
       {/* Rear door */}
-      <path d="M178 100 L178 165 L265 165 L265 100 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.5"/>
+      <path d="M178 98 L178 162 L265 162 L265 98 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.2" />
+      {/* Rear door window */}
+      <path d="M183 100 L182 140 L260 140 L260 100 Z" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="0.8" opacity="0.6" />
+      {/* B-pillar */}
+      <line x1="175" y1="40" x2="175" y2="165" stroke="#64748b" strokeWidth="2.5" />
       {/* Trunk */}
-      <path d="M265 100 L265 165 L355 165 L355 100 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.5"/>
-      {/* Bumper front */}
-      <path d="M20 155 Q20 175 35 178 L80 178 L80 165 L30 165 Z" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.5"/>
-      {/* Bumper rear */}
-      <path d="M355 165 L355 178 L365 178 Q375 175 375 155 Z" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.5"/>
+      <path d="M265 100 L265 165 L358 165 L358 100 Q358 70 340 55 Q325 45 300 40 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1" />
       {/* Door handles */}
-      <rect x="120" y="128" width="20" height="6" rx="3" fill="#94a3b8" stroke="#64748b" strokeWidth="1"/>
-      <rect x="215" y="128" width="20" height="6" rx="3" fill="#94a3b8" stroke="#64748b" strokeWidth="1"/>
+      <rect x="105" y="125" width="22" height="5" rx="2.5" fill="#94a3b8" stroke="#64748b" strokeWidth="0.8" />
+      <rect x="200" y="125" width="22" height="5" rx="2.5" fill="#94a3b8" stroke="#64748b" strokeWidth="0.8" />
+      {/* Chrome window trim */}
+      <path d="M80 43 L67 95 L155 95 L175 40" fill="none" stroke="#cbd5e1" strokeWidth="1.5" />
+      <path d="M175 40 L175 95 L265 95 L275 39" fill="none" stroke="#cbd5e1" strokeWidth="1.5" />
       {/* Headlight */}
-      <path d="M22 120 Q22 105 35 102 L75 102 L75 125 L22 125 Z" fill="#fef9c3" stroke="#eab308" strokeWidth="1.5"/>
+      <path d="M22 118 Q22 100 38 95 L78 95 L78 125 L22 125 Z" fill="#fef08a" stroke="#ca8a04" strokeWidth="1.5" />
+      <path d="M28 112 Q28 102 38 98 L70 98 L70 118 L28 118 Z" fill="#f8fafc" opacity="0.6" />
       {/* Tail light */}
-      <path d="M358 120 Q358 105 348 102 L310 102 L310 125 L358 125 Z" fill="#fecaca" stroke="#ef4444" strokeWidth="1.5"/>
-      {/* Wheels */}
-      <circle cx="95" cy="178" r="36" fill="#374151" stroke="#1f2937" strokeWidth="2"/>
-      <circle cx="95" cy="178" r="22" fill="#6b7280" stroke="#374151" strokeWidth="1.5"/>
-      <circle cx="95" cy="178" r="8" fill="#9ca3af"/>
-      <circle cx="295" cy="178" r="36" fill="#374151" stroke="#1f2937" strokeWidth="2"/>
-      <circle cx="295" cy="178" r="22" fill="#6b7280" stroke="#374151" strokeWidth="1.5"/>
-      <circle cx="295" cy="178" r="8" fill="#9ca3af"/>
-      {/* Mirror */}
-      <path d="M55 90 L65 90 L68 100 L52 100 Z" fill="#94a3b8" stroke="#64748b" strokeWidth="1"/>
+      <path d="M360 118 Q360 100 348 95 L310 95 L310 125 L360 125 Z" fill="#fca5a5" stroke="#dc2626" strokeWidth="1.5" />
+      {/* Bumper front */}
+      <path d="M18 152 Q18 172 32 178 L80 178 L80 162 L28 162 Z" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.2" />
+      {/* Bumper rear */}
+      <path d="M360 162 L360 178 L372 178 Q380 172 380 152 Z" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.2" />
+      {/* Side mirror */}
+      <path d="M52 88 L62 88 L66 100 L48 100 Z" fill="#475569" stroke="#1e293b" strokeWidth="0.8" />
+      <path d="M54 90 L60 90 L63 98 L51 98 Z" fill="#64748b" />
+      {/* Front wheel */}
+      <circle cx="95" cy="180" r="34" fill="#1e293b" stroke="#0f172a" strokeWidth="2" />
+      <circle cx="95" cy="180" r="22" fill="#334155" stroke="#1e293b" strokeWidth="1.5" />
+      <circle cx="95" cy="180" r="8" fill="#64748b" />
+      <line x1="95" y1="158" x2="95" y2="202" stroke="#475569" strokeWidth="1" opacity="0.5" />
+      <line x1="73" y1="180" x2="117" y2="180" stroke="#475569" strokeWidth="1" opacity="0.5" />
+      {/* Rear wheel */}
+      <circle cx="295" cy="180" r="34" fill="#1e293b" stroke="#0f172a" strokeWidth="2" />
+      <circle cx="295" cy="180" r="22" fill="#334155" stroke="#1e293b" strokeWidth="1.5" />
+      <circle cx="295" cy="180" r="8" fill="#64748b" />
+      <line x1="295" y1="158" x2="295" y2="202" stroke="#475569" strokeWidth="1" opacity="0.5" />
+      <line x1="273" y1="180" x2="317" y2="180" stroke="#475569" strokeWidth="1" opacity="0.5" />
+      {/* Side skirt */}
+      <path d="M82 165 L265 165" stroke="#64748b" strokeWidth="1.5" opacity="0.3" />
     </svg>
   );
 }
@@ -192,42 +306,76 @@ function LeftSideViewSVG() {
 function RightSideViewSVG() {
   return (
     <svg viewBox="0 0 380 220" className="w-full h-full" style={{ maxHeight: 220 }}>
-      {/* Body (mirrored) */}
-      <path d="M350 170 L350 100 Q345 60 300 45 L220 35 L120 38 Q60 42 35 80 L25 170 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="2"/>
+      <defs>
+        <linearGradient id="bodySideR" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="#f8fafc" />
+          <stop offset="100%" stopColor="#e2e8f0" />
+        </linearGradient>
+        <linearGradient id="glassSideR" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#7dd3fc" />
+          <stop offset="100%" stopColor="#38bdf8" />
+        </linearGradient>
+      </defs>
+      {/* Shadow */}
+      <ellipse cx="190" cy="210" rx="160" ry="8" fill="#00000012" />
+      {/* Main body silhouette - mirrored */}
+      <path d="M355 165 L355 100 Q350 55 300 42 L220 30 L120 35 Q55 40 30 80 L22 165 Q22 175 35 182 L350 182 Q355 175 355 165 Z" fill="url(#bodySideR)" stroke="#94a3b8" strokeWidth="1.8" />
+      {/* Body character line */}
+      <path d="M352 150 L220 145 L120 145 L25 150" fill="none" stroke="#94a3b8" strokeWidth="0.8" opacity="0.6" />
+      {/* Lower body line */}
+      <path d="M352 175 L35 175" fill="none" stroke="#64748b" strokeWidth="0.6" opacity="0.4" />
       {/* Windshield */}
-      <path d="M298 46 L310 100 L225 100 L220 38 Z" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="1.5"/>
+      <path d="M300 43 L313 95 L225 95 L218 32 Z" fill="url(#glassSideR)" stroke="#38bdf8" strokeWidth="1.2" />
       {/* Rear window */}
-      <path d="M205 38 L205 100 L115 100 L112 42 Z" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="1.5"/>
+      <path d="M205 32 L205 95 L115 95 L105 39 Z" fill="url(#glassSideR)" stroke="#38bdf8" strokeWidth="1.2" />
       {/* Roof */}
-      <path d="M300 45 L220 35 L120 38 L112 42 L115 100 L225 100 L310 100 L298 46 Z" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="1.5"/>
+      <path d="M300 43 L220 30 L120 35 L105 39 L115 95 L205 95 L225 95 L313 95 L300 43 Z" fill="#f1f5f9" stroke="#94a3b8" strokeWidth="1.2" />
       {/* Hood */}
-      <path d="M350 100 L350 170 L300 170 L300 100 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.5"/>
+      <path d="M355 100 L355 165 L300 165 L300 100 Q300 70 320 55 Q335 45 355 100 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1" />
       {/* Front door */}
-      <path d="M300 100 L300 165 L205 165 L205 100 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.5"/>
+      <path d="M298 98 L298 162 L205 162 L205 98 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.2" />
+      {/* Front door window */}
+      <path d="M290 100 L292 140 L210 140 L210 100 Z" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="0.8" opacity="0.6" />
       {/* Rear door */}
-      <path d="M202 100 L202 165 L115 165 L115 100 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.5"/>
+      <path d="M202 98 L202 162 L115 162 L115 98 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.2" />
+      {/* Rear door window */}
+      <path d="M197 100 L198 140 L120 140 L120 100 Z" fill="#e0f2fe" stroke="#7dd3fc" strokeWidth="0.8" opacity="0.6" />
+      {/* B-pillar */}
+      <line x1="205" y1="40" x2="205" y2="165" stroke="#64748b" strokeWidth="2.5" />
       {/* Trunk */}
-      <path d="M115 100 L115 165 L25 165 L25 100 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1.5"/>
-      {/* Bumper front */}
-      <path d="M360 155 Q360 175 345 178 L300 178 L300 165 L350 165 Z" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.5"/>
-      {/* Bumper rear */}
-      <path d="M25 165 L25 178 L15 178 Q5 175 5 155 Z" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.5"/>
+      <path d="M115 100 L115 165 L22 165 L22 100 Q22 70 40 55 Q55 45 80 40 Z" fill="#f8fafc" stroke="#94a3b8" strokeWidth="1" />
       {/* Door handles */}
-      <rect x="240" y="128" width="20" height="6" rx="3" fill="#94a3b8" stroke="#64748b" strokeWidth="1"/>
-      <rect x="145" y="128" width="20" height="6" rx="3" fill="#94a3b8" stroke="#64748b" strokeWidth="1"/>
+      <rect x="253" y="125" width="22" height="5" rx="2.5" fill="#94a3b8" stroke="#64748b" strokeWidth="0.8" />
+      <rect x="158" y="125" width="22" height="5" rx="2.5" fill="#94a3b8" stroke="#64748b" strokeWidth="0.8" />
+      {/* Chrome window trim */}
+      <path d="M300 43 L313 95 L225 95 L205 40" fill="none" stroke="#cbd5e1" strokeWidth="1.5" />
+      <path d="M205 40 L205 95 L115 95 L105 39" fill="none" stroke="#cbd5e1" strokeWidth="1.5" />
       {/* Headlight */}
-      <path d="M358 120 Q358 105 345 102 L305 102 L305 125 L358 125 Z" fill="#fef9c3" stroke="#eab308" strokeWidth="1.5"/>
+      <path d="M358 118 Q358 100 342 95 L302 95 L302 125 L358 125 Z" fill="#fef08a" stroke="#ca8a04" strokeWidth="1.5" />
+      <path d="M352 112 Q352 102 342 98 L310 98 L310 118 L352 118 Z" fill="#f8fafc" opacity="0.6" />
       {/* Tail light */}
-      <path d="M22 120 Q22 105 32 102 L70 102 L70 125 L22 125 Z" fill="#fecaca" stroke="#ef4444" strokeWidth="1.5"/>
-      {/* Wheels */}
-      <circle cx="285" cy="178" r="36" fill="#374151" stroke="#1f2937" strokeWidth="2"/>
-      <circle cx="285" cy="178" r="22" fill="#6b7280" stroke="#374151" strokeWidth="1.5"/>
-      <circle cx="285" cy="178" r="8" fill="#9ca3af"/>
-      <circle cx="85" cy="178" r="36" fill="#374151" stroke="#1f2937" strokeWidth="2"/>
-      <circle cx="85" cy="178" r="22" fill="#6b7280" stroke="#374151" strokeWidth="1.5"/>
-      <circle cx="85" cy="178" r="8" fill="#9ca3af"/>
-      {/* Mirror */}
-      <path d="M325 90 L315 90 L312 100 L328 100 Z" fill="#94a3b8" stroke="#64748b" strokeWidth="1"/>
+      <path d="M20 118 Q20 100 32 95 L70 95 L70 125 L20 125 Z" fill="#fca5a5" stroke="#dc2626" strokeWidth="1.5" />
+      {/* Bumper front */}
+      <path d="M362 152 Q362 172 348 178 L300 178 L300 162 L352 162 Z" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.2" />
+      {/* Bumper rear */}
+      <path d="M20 162 L20 178 L8 178 Q0 172 0 152 Z" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.2" />
+      {/* Side mirror */}
+      <path d="M328 88 L318 88 L314 100 L332 100 Z" fill="#475569" stroke="#1e293b" strokeWidth="0.8" />
+      <path d="M326 90 L320 90 L317 98 L329 98 Z" fill="#64748b" />
+      {/* Front wheel */}
+      <circle cx="285" cy="180" r="34" fill="#1e293b" stroke="#0f172a" strokeWidth="2" />
+      <circle cx="285" cy="180" r="22" fill="#334155" stroke="#1e293b" strokeWidth="1.5" />
+      <circle cx="285" cy="180" r="8" fill="#64748b" />
+      <line x1="285" y1="158" x2="285" y2="202" stroke="#475569" strokeWidth="1" opacity="0.5" />
+      <line x1="263" y1="180" x2="307" y2="180" stroke="#475569" strokeWidth="1" opacity="0.5" />
+      {/* Rear wheel */}
+      <circle cx="85" cy="180" r="34" fill="#1e293b" stroke="#0f172a" strokeWidth="2" />
+      <circle cx="85" cy="180" r="22" fill="#334155" stroke="#1e293b" strokeWidth="1.5" />
+      <circle cx="85" cy="180" r="8" fill="#64748b" />
+      <line x1="85" y1="158" x2="85" y2="202" stroke="#475569" strokeWidth="1" opacity="0.5" />
+      <line x1="63" y1="180" x2="107" y2="180" stroke="#475569" strokeWidth="1" opacity="0.5" />
+      {/* Side skirt */}
+      <path d="M298 165 L115 165" stroke="#64748b" strokeWidth="1.5" opacity="0.3" />
     </svg>
   );
 }
@@ -237,7 +385,6 @@ function RightSideViewSVG() {
 interface ZoneHotspot {
   id: string;
   nombre: string;
-  // SVG viewBox percentages
   x: number;
   y: number;
   w: number;
@@ -314,19 +461,17 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
   const [noteInput, setNoteInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Sync to external onChange as ZonaVehiculoPDF[]
   const syncExternal = useCallback((newDamages: DamageEntry[]) => {
     if (!onChange) return;
-    // Convert damage entries to ZonaVehiculoPDF format
     const zonaMap = new Map<string, ZonaVehiculoPDF>();
     newDamages.forEach((d) => {
       const existing = zonaMap.get(d.zonaId);
       const tipoMapped = d.tipo === 'sin-dano' ? 'bueno'
         : d.tipo === 'rayon' ? 'rayado'
-        : d.tipo === 'golpe' ? 'golpe-leve'
-        : d.tipo === 'abolladura' ? 'golpe-fuerte'
-        : d.tipo === 'pintura' ? 'rayado'
-        : null;
+          : d.tipo === 'golpe' ? 'golpe-leve'
+            : d.tipo === 'abolladura' ? 'golpe-fuerte'
+              : d.tipo === 'pintura' ? 'rayado'
+                : null;
       if (!existing) {
         zonaMap.set(d.zonaId, {
           id: d.zonaId,
@@ -348,7 +493,6 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
 
   const addDamage = (zone: ZoneHotspot) => {
     if (!selectedTool) return;
-    // If eraser tool, remove damages for this zone in current view
     const newDamage: DamageEntry = {
       id: `dmg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       zonaId: zone.id,
@@ -380,14 +524,11 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
   const handleZoneClick = (zone: ZoneHotspot) => {
     if (selectedTool === null) return;
     if (selectedTool === null) {
-      // borrar mode — handled by separate button
       eraseDamage(zone.id);
       return;
     }
-    // Check if zone already has a damage in this view
     const existing = damages.find((d) => d.zonaId === zone.id && d.view === activeView);
     if (existing) {
-      // Update type
       const updated = damages.map((d) =>
         d.id === existing.id ? { ...d, tipo: selectedTool, timestamp: new Date().toISOString() } : d
       );
@@ -457,7 +598,6 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
 
   const currentViewZones = ZONE_HOTSPOTS.filter((z) => z.view === activeView);
 
-  // View icons
   const viewIcons: Record<VehicleView, string> = {
     'superior':    '🚗',
     'lateral-izq': '🚘',
@@ -501,7 +641,8 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
                 onClick={() => setActiveView(view.id)}
                 className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
                   activeView === view.id
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200 font-semibold' :'text-gray-600 hover:bg-gray-50 border border-transparent'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200 font-semibold'
+                    : 'text-gray-600 hover:bg-gray-50 border border-transparent'
                 }`}
               >
                 <span className="text-base">{viewIcons[view.id]}</span>
@@ -670,7 +811,8 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
                   onClick={() => setSelectedTool(null)}
                   className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border-2 transition-all min-w-[60px] ${
                     selectedTool === null
-                      ? 'border-gray-400 bg-gray-100' :'border-gray-100 hover:border-gray-200'
+                      ? 'border-gray-400 bg-gray-100'
+                      : 'border-gray-100 hover:border-gray-200'
                   }`}
                 >
                   <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-sm">

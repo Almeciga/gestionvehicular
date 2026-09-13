@@ -7,7 +7,7 @@ import { initialDataDownload, incrementalSync } from '@/lib/syncService';
 import { ProfilesRepo } from '@/lib/repositories';
 
 
-export type UserRole = 'admin' | 'inspector' | 'comercial';
+export type UserRole = 'admin' | 'inspector';
 
 export interface UserProfile {
   id: string;
@@ -26,7 +26,6 @@ interface AuthContextType {
   role: UserRole | null;
   isAdmin: boolean;
   isInspector: boolean;
-  isComercial: boolean;
   loading: boolean;
   profileLoading: boolean;
   signUp: (email: string, password: string, metadata?: Record<string, unknown>) => Promise<unknown>;
@@ -40,8 +39,17 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
-// Singleton client — outside the component so it's never recreated on re-render
-const supabase = createClient();
+// Singleton client — lazy getter to avoid module-level crash if env vars are
+// missing during SSR or Netlify cold start. createClient() throws if
+// NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY are undefined,
+// so we must defer creation until the component actually mounts in the browser.
+let _supabaseInstance: ReturnType<typeof createClient> | null = null;
+function getSupabase() {
+  if (!_supabaseInstance) {
+    _supabaseInstance = createClient();
+  }
+  return _supabaseInstance;
+}
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
@@ -150,7 +158,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     // Initialize auth state — check session first, only call getUser if session exists
-    supabase.auth.getSession().then(async (result: Awaited<ReturnType<typeof supabase.auth.getSession>>) => {
+    getSupabase().auth.getSession().then(async (result: Awaited<ReturnType<ReturnType<typeof getSupabase>['auth']['getSession']>>) => {
       const currentSession = result.data.session;
       const sessionError = result.error;
       if (sessionError) {
@@ -184,7 +192,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+    const { data: { subscription } } = getSupabase().auth.onAuthStateChange(
       async (event: import('@supabase/supabase-js').AuthChangeEvent, newSession: import('@supabase/supabase-js').Session | null) => {
         setSession(newSession);
         const u = newSession?.user ?? null;
@@ -194,7 +202,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (event === 'TOKEN_REFRESHED' && !newSession) {
           console.warn('[AuthContext] Token refresh failed — signing out');
           try {
-            await supabase.auth.signOut();
+            await getSupabase().auth.signOut();
           } catch {
             // ignore signOut errors
           }
@@ -237,7 +245,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const origin = typeof window !== 'undefined'
       ? window.location.origin
       : (process.env.NEXT_PUBLIC_SITE_URL ?? '');
-    const { data, error } = await supabase.auth.signUp({
+    const { data, error } = await getSupabase().auth.signUp({
       email,
       password,
       options: {
@@ -249,30 +257,37 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         emailRedirectTo: `${origin}/auth/callback`,
       },
     });
-    return { data, error };
+    if (error) throw error;
+    return data;
   };
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    return { data, error };
+    const { data, error } = await getSupabase().auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    return data;
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setProfile(null);
-    setUser(null);
-    setSession(null);
-    initialSyncDoneRef.current = false;
+    try {
+      await getSupabase().auth.signOut();
+    } catch (err) {
+      console.warn('[AuthContext] signOut error (proceeding with local cleanup):', err);
+    } finally {
+      setUser(null);
+      setSession(null);
+      setProfile(null);
+      initialSyncDoneRef.current = false;
+    }
   };
 
   const getCurrentUser = async (): Promise<User | null> => {
-    const { data: { user: u } } = await supabase.auth.getUser();
-    return u;
+    const { data: { user }, error } = await getSupabase().auth.getUser();
+    if (error) throw error;
+    return user;
   };
 
-  const isEmailVerified = (): boolean => {
-    return user?.email_confirmed_at != null;
-  };
+  const isEmailVerified = () =>
+    user?.email_confirmed_at !== null && user?.email_confirmed_at !== undefined;
 
   /**
    * getUserProfile — reads from IndexedDB first, falls back to JWT.
@@ -280,29 +295,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
    */
   const getUserProfile = async (): Promise<UserProfile | null> => {
     if (!user) return null;
-    setProfileLoading(true);
-    try {
-      const p = await resolveProfile(user);
-      setProfile(p);
-      return p;
-    } finally {
-      setProfileLoading(false);
-    }
+    return resolveProfile(user);
   };
 
   /**
    * refreshProfile — triggers incremental sync and re-reads from IndexedDB.
    */
-  const refreshProfile = async (): Promise<void> => {
+  const refreshProfile = async () => {
     if (!user) return;
-    const p = await resolveProfile(user);
-    setProfile(p);
+    setProfileLoading(true);
+    try {
+      await incrementalSync(['profiles']);
+      const enriched = await resolveProfile(user);
+      setProfile(enriched);
+    } finally {
+      setProfileLoading(false);
+    }
   };
 
-  const role = profile?.role ?? null;
+  const role: UserRole | null = profile?.role ?? null;
   const isAdmin = role === 'admin';
   const isInspector = role === 'inspector';
-  const isComercial = role === 'comercial';
 
   const value: AuthContextType = {
     user,
@@ -311,7 +324,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     role,
     isAdmin,
     isInspector,
-    isComercial,
     loading,
     profileLoading,
     signUp,

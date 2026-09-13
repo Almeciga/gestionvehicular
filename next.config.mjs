@@ -16,30 +16,23 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
 
+  // Prevent Dexie (IndexedDB) from being bundled into server/serverless functions.
+  // Dexie is a browser-only library; importing it on the server crashes the function.
+  serverExternalPackages: ['dexie'],
+
   images: {
     remotePatterns: imageHosts,
     minimumCacheTTL: 60,
   },
 
-  webpack(config, { dev }) {
-if (dev) {
-  config.module.rules.push({
-    test: /\.(jsx|tsx)$/,
-    exclude: [/node_modules/],
-    use: [{
-      loader: '@dhiwise/component-tagger/nextLoader',
-    }],
-  });
-  const ignoredPaths = (process.env.WATCH_IGNORED_PATHS || '')
-    .split(',')
-    .map((p) => p.trim())
-    .filter(Boolean);
-  config.watchOptions = {
-    ignored: ignoredPaths.length
-      ? ignoredPaths.map((p) => `**/${p.replace(/^\/+|\/+$/g, '')}/**`)
-      : undefined,
-  };
-}
+  webpack(config, { dev, isServer }) {
+    // Exclude dexie from server-side bundles to prevent serverless crash
+    if (isServer) {
+      config.externals = [
+        ...(Array.isArray(config.externals) ? config.externals : config.externals ? [config.externals] : []),
+        'dexie',
+      ];
+    }
 
     return config;
   }

@@ -185,6 +185,47 @@ function inspectionToSupabase(payload: Record<string, unknown>, inspectorId: str
   };
 }
 
+type InspectionTransition = { rpcName: string; rpcArgs: Record<string, unknown> };
+
+/**
+ * The database explicitly forbids PATCHing inspections.status.  Keep this
+ * legacy queue compatible with that contract while the inspection module is
+ * migrated away from localStorage.
+ */
+function getInspectionTransition(
+  currentStatus: unknown,
+  requestedStatus: unknown,
+  payload: Record<string, unknown>,
+  inspectionId: string
+): InspectionTransition | null | { error: string } {
+  if (typeof requestedStatus !== 'string' || requestedStatus === currentStatus) return null;
+
+  switch (requestedStatus) {
+    case 'pendiente_revision':
+      return { rpcName: 'submit_for_review', rpcArgs: { p_inspection_id: inspectionId } };
+    case 'aprobado':
+      return { rpcName: 'approve_inspection', rpcArgs: { p_inspection_id: inspectionId } };
+    case 'rechazado': {
+      const reason = payload.rejection_reason;
+      return typeof reason === 'string' && reason.trim()
+        ? { rpcName: 'reject_inspection', rpcArgs: { p_inspection_id: inspectionId, p_reason: reason } }
+        : { error: 'La transición a rechazado requiere rejection_reason.' };
+    }
+    case 'finalizado':
+      return { rpcName: 'finalize_inspection', rpcArgs: { p_inspection_id: inspectionId } };
+    case 'archivado':
+      return { rpcName: 'archive_inspection', rpcArgs: { p_inspection_id: inspectionId } };
+    case 'activo': {
+      const reason = payload.unlock_reason;
+      return typeof reason === 'string' && reason.trim()
+        ? { rpcName: 'admin_unlock_inspection', rpcArgs: { p_inspection_id: inspectionId, p_reason: reason } }
+        : { error: 'La transición a activo requiere unlock_reason.' };
+    }
+    default:
+      return { error: `Transición de estado no soportada: ${requestedStatus}` };
+  }
+}
+
 /** Attempt to sync a single queue item to Supabase */
 async function syncItem(item: QueueItem): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
@@ -225,23 +266,45 @@ async function syncItem(item: QueueItem): Promise<{ success: boolean; error?: st
         }
       }
     } else if (item.action === 'finalize' || item.action === 'unlock') {
-      // Finalize/unlock: update by remote id or placa
+      // These state changes are server-governed.  Do not PATCH `status` (or
+      // lock/finalization metadata): the transition RPC performs them and the
+      // DB trigger writes the audit trail.
       const matchCol = item.remoteId || (item.type === 'inspection' && isUuid(item.localId))
         ? 'id'
         : (item.type === 'vehicle' ? 'placa' : 'local_id');
       const matchVal = item.remoteId ?? (item.type === 'vehicle' ? item.payload.placa as string : item.localId);
-      const { error } = await supabase.from(table).update(data).eq(matchCol, matchVal);
-      if (error) return { success: false, error: error.message };
 
-      // Write audit log entry for inspections
       if (item.type === 'inspection') {
-        const action = item.action === 'finalize' ? 'finalized' : 'unlocked';
-        await supabase.from('inspection_audit_log').insert({
-          inspection_id: item.remoteId ?? null,
-          action,
-          performed_by: user.id,
-          details: { local_id: item.localId, timestamp: new Date().toISOString() },
-        }).then(() => {}); // non-fatal
+        const { data: existing, error: lookupError } = await supabase
+          .from(table)
+          .select('id, status')
+          .eq(matchCol, matchVal)
+          .maybeSingle();
+        if (lookupError || !existing?.id) {
+          return { success: false, error: lookupError?.message ?? 'Inspección remota no encontrada' };
+        }
+
+        const inspectionData = data as ReturnType<typeof inspectionToSupabase>;
+        const transition = getInspectionTransition(existing.status, inspectionData.status, item.payload, existing.id);
+        if (transition && 'error' in transition) return { success: false, error: transition.error };
+        if (transition) {
+          const { error } = await supabase.rpc(transition.rpcName, transition.rpcArgs);
+          if (error) return { success: false, error: error.message };
+        }
+
+        const {
+          status: _status,
+          is_locked: _isLocked,
+          finalized_at: _finalizedAt,
+          finalized_by: _finalizedBy,
+          finalization_timestamp: _finalizationTimestamp,
+          ...contentData
+        } = inspectionData;
+        const { error } = await supabase.from(table).update(contentData).eq('id', existing.id);
+        if (error) return { success: false, error: error.message };
+      } else {
+        const { error } = await supabase.from(table).update(data).eq(matchCol, matchVal);
+        if (error) return { success: false, error: error.message };
       }
     } else {
       // update — match by remote id or placa/local_id
@@ -254,7 +317,7 @@ async function syncItem(item: QueueItem): Promise<{ success: boolean; error?: st
         // Conflict detection: only update if our local version is newer
         const { data: existing, error: conflictError } = await supabase
           .from(table)
-          .select('updated_at, is_locked')
+          .select('id, updated_at, is_locked, status')
           .eq(matchCol, matchVal)
           .maybeSingle();
 
@@ -265,6 +328,10 @@ async function syncItem(item: QueueItem): Promise<{ success: boolean; error?: st
             hint: conflictError.hint,
             code: conflictError.code,
           });
+        }
+
+        if (!existing?.id) {
+          return { success: false, error: 'Inspección remota no encontrada para actualizar' };
         }
 
         if (existing?.updated_at) {
@@ -278,6 +345,27 @@ async function syncItem(item: QueueItem): Promise<{ success: boolean; error?: st
         if (existing?.is_locked && (item.action as string) !== 'unlock') {
           return { success: true };
         }
+
+        // The status trigger only permits the audited transition RPCs.  The
+        // normal PATCH below deliberately excludes status and saves content.
+        const inspectionData = data as ReturnType<typeof inspectionToSupabase>;
+        const requestedStatus = inspectionData.status;
+        const transition = getInspectionTransition(
+          existing?.status,
+          requestedStatus,
+          item.payload,
+          existing.id
+        );
+        if (transition && 'error' in transition) return { success: false, error: transition.error };
+        if (transition) {
+          const { error: transitionError } = await supabase.rpc(transition.rpcName, transition.rpcArgs);
+          if (transitionError) return { success: false, error: transitionError.message };
+        }
+
+        const { status: _status, ...contentData } = inspectionData;
+        const { error } = await supabase.from(table).update(contentData).eq(matchCol, matchVal);
+        if (error) return { success: false, error: error.message };
+        return { success: true };
       }
 
       const { error } = await supabase.from(table).update(data).eq(matchCol, matchVal);

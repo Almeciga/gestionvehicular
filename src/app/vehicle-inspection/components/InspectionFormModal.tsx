@@ -15,9 +15,12 @@ import ObservacionesSection from './sections/ObservacionesSection';
 import VideoSection, { type VideoPDF } from './sections/VideoSection';
 import FirmasSection, { type FirmasPDF } from './sections/FirmasSection';
 import { toast } from 'sonner';
-import { saveInspection, updateInspection, getInspections, submitForReview, EDITABLE_STATUSES, type Inspection } from '@/lib/store';
-import { enqueue } from '@/lib/syncQueue';
+import { InspectionsRepo } from '@/lib/repositories';
+import { EDITABLE_STATUSES, toInspectionView, type InspectionView } from '@/lib/inspectionView';
+import type { DBInspection } from '@/lib/db';
 import { saveDraft, getDraft, deleteDraft } from '@/lib/offlineDB';
+import { queueInspectionMedia } from '../../../lib/inspectionMedia';
+import { processSyncQueue } from '@/lib/syncService';
 import { generateInspectionPDFWithProgress, openPDFInPrintWindow, type InspectionPDFData, type PDFGenerationProgress } from '@/lib/inspectionPdfGenerator';
 import { useAuth } from '@/contexts/AuthContext';
 import PdfGenerationModal from './PdfGenerationModal';
@@ -45,6 +48,44 @@ const sections = [
 ] as const;
 
 type SectionId = typeof sections[number]['id'];
+
+type InspectionPayload = {
+  placa: string; marca: string; modelo: string; color: string; propietario: string; fecha: string;
+  seccionesCompletadas: number; totalSecciones: number; inspectorId: string; inspectorName: string;
+  datos: Record<string, unknown>;
+};
+
+function normalizeFecha(fecha: string): string {
+  if (!fecha) return fecha;
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(fecha)) return fecha;
+  const isoMatch = fecha.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, y, m, d] = isoMatch;
+    return `${d}/${m}/${y}`;
+  }
+  return fecha;
+}
+
+function toDBChanges(payload: InspectionPayload): Partial<DBInspection> {
+  return {
+    placa: payload.placa, marca: payload.marca, modelo: payload.modelo, color: payload.color,
+    propietario: payload.propietario, fecha: normalizeFecha(payload.fecha), secciones_completadas: payload.seccionesCompletadas,
+    total_secciones: payload.totalSecciones, inspector_id: payload.inspectorId || undefined,
+    inspector_name: payload.inspectorName || undefined, data: payload.datos,
+  };
+}
+
+function toDBCreate(payload: InspectionPayload): Omit<DBInspection, '_synced_at' | '_dirty' | 'version' | 'base_version'> {
+  const now = new Date().toISOString();
+  return {
+    ...toDBChanges(payload),
+    id: crypto.randomUUID(),
+    status: 'activo',
+    created_at: now,
+    updated_at: now,
+    creation_timestamp: now,
+  } as Omit<DBInspection, '_synced_at' | '_dirty' | 'version' | 'base_version'>;
+}
 
 // ─── Mandatory photo validation ───────────────────────────────────────────────
 
@@ -179,7 +220,7 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
   const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showSectionMenu, setShowSectionMenu] = useState(false);
-  const [existingInspection, setExistingInspection] = useState<Inspection | null>(null);
+  const [existingInspection, setExistingInspection] = useState<InspectionView | null>(null);
   const [pdfProgress, setPdfProgress] = useState<PDFGenerationProgress | null>(null);
   const [pendingPdfData, setPendingPdfData] = useState<InspectionPDFData | null>(null);
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
@@ -188,7 +229,6 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
   const currentIdRef = useRef<string | null>(inspectionId);
 
   // ─── Central section state ────────────────────────────────────────────────
-  // Use a stable empty string for SSR; populated on client via useEffect
   const [today, setToday] = useState<string>('');
   useEffect(() => {
     setToday(new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }));
@@ -215,20 +255,29 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
   const [video, setVideo] = useState<VideoPDF>({ tieneVideo: null, videoLink: '', videoFile: null });
   const [firmas, setFirmas] = useState<FirmasPDF>({ inspectorName: profile?.full_name || '', clienteName: '', inspectorSignature: null, clienteSignature: null });
 
-  // ─── Derived status flags ──────────────────────────────────────────────────
-  // Read-only whenever the record isn't in an editable state, regardless of
-  // role — admins act on the record via Aprobar/Rechazar/Finalizar/Archivar/
-  // Desbloquear from the list, not by editing content here directly.
+  // ─── Derived status flags ─────────────────────────────────────────────────
   const isReadOnly = existingInspection ? !EDITABLE_STATUSES.includes(existingInspection.status) : false;
   const isFinalized = existingInspection?.status === 'finalizado';
   const isPendingReview = existingInspection?.status === 'pendiente_revision';
-  const isCompleted = existingInspection?.status === 'completado';
+  const isCompleted = existingInspection?.status === 'aprobado';
   const isArchived = existingInspection?.status === 'archivado';
+
+  // ─── Auto-marca 'firmas' como completa cuando ambas firmas están presentes ─
+  useEffect(() => {
+    if (firmas.inspectorSignature && firmas.clienteSignature) {
+      setCompletedSections((prev) => new Set([...prev, 'firmas']));
+    } else {
+      setCompletedSections((prev) => {
+        const next = new Set(prev);
+        next.delete('firmas');
+        return next;
+      });
+    }
+  }, [firmas.inspectorSignature, firmas.clienteSignature]);
 
   // ─── Load existing inspection ─────────────────────────────────────────────
   useEffect(() => {
     if (!inspectionId) {
-      // Check for draft recovery
       const draftKey = `draft-new-${profile?.id || 'anon'}`;
       getDraft(draftKey).then((draft) => {
         if (draft && draft.data) {
@@ -237,43 +286,49 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
       });
       return;
     }
-    const all = getInspections();
-    const found = all.find((i) => i.id === inspectionId);
-    if (!found) return;
-    setExistingInspection(found);
+    let cancelled = false;
+    const load = async () => {
+      const foundRow = await InspectionsRepo.getById(inspectionId);
+      const found = foundRow && toInspectionView(foundRow);
+      if (!found) return;
+      if (cancelled) return;
+      setExistingInspection(found);
 
-    const d = (found.datos ?? {}) as Record<string, unknown>;
-    setDatosGenerales({
-      vehicleId: (d.vehicleId as string) || '',
-      placa: found.placa || '',
-      marca: found.marca || '',
-      modelo: found.modelo || '',
-      color: found.color || '',
-      propietario: found.propietario || '',
-      vin: (d.vin as string) || '',
-      codigo: (d.codigo as string) || '',
-      bodega: (d.bodega as string) || '',
-      nivel: (d.nivel as string) || '',
-      estado: (d.estado as string) || '',
-      km: (d.km as string) || '',
-      telefono: (d.telefono as string) || '',
-      celular: (d.celular as string) || '',
-      inspectorName: (d.inspectorName as string) || found.inspectorName || profile?.full_name || '',
-      fecha: found.fecha || today,
-    });
-    if (d.accesorios) setAccesorios(d.accesorios as AccesorioItemPDF[]);
-    if (d.documentos) setDocumentos(d.documentos as DocItemPDF[]);
-    if (d.piezas) setPiezas(d.piezas as ItemConEstadoPDF[]);
-    if (d.componentes) setComponentes(d.componentes as ItemConEstadoPDF[]);
-    if (d.mecanica) setMecanica(d.mecanica as ItemMecanicaPDF[]);
-    if (typeof d.combustible === 'number') setCombustible(d.combustible);
-    if (d.scanner) setScanner(d.scanner as ScannerPDF);
-    if (d.latoneria) setLatoneria(d.latoneria as ZonaVehiculoPDF[]);
-    if (d.vidrios) setVidrios(d.vidrios as VidrioItemPDF[]);
-    if (d.observaciones) setObservaciones(d.observaciones as string);
-    if (d.video) setVideo(d.video as VideoPDF);
-    if (d.firmas) setFirmas(d.firmas as FirmasPDF);
-    if (d.completedSections) setCompletedSections(new Set(d.completedSections as SectionId[]));
+      const d = (found.datos ?? {}) as Record<string, unknown>;
+      setDatosGenerales({
+        vehicleId: (d.vehicleId as string) || '',
+        placa: found.placa || '',
+        marca: found.marca || '',
+        modelo: found.modelo || '',
+        color: found.color || '',
+        propietario: found.propietario || '',
+        vin: (d.vin as string) || '',
+        codigo: (d.codigo as string) || '',
+        bodega: (d.bodega as string) || '',
+        nivel: (d.nivel as string) || '',
+        estado: (d.estado as string) || '',
+        km: (d.km as string) || '',
+        telefono: (d.telefono as string) || '',
+        celular: (d.celular as string) || '',
+        inspectorName: (d.inspectorName as string) || found.inspectorName || profile?.full_name || '',
+        fecha: found.fecha || today,
+      });
+      if (d.accesorios) setAccesorios(d.accesorios as AccesorioItemPDF[]);
+      if (d.documentos) setDocumentos(d.documentos as DocItemPDF[]);
+      if (d.piezas) setPiezas(d.piezas as ItemConEstadoPDF[]);
+      if (d.componentes) setComponentes(d.componentes as ItemConEstadoPDF[]);
+      if (d.mecanica) setMecanica(d.mecanica as ItemMecanicaPDF[]);
+      if (typeof d.combustible === 'number') setCombustible(d.combustible);
+      if (d.scanner) setScanner(d.scanner as ScannerPDF);
+      if (d.latoneria) setLatoneria(d.latoneria as ZonaVehiculoPDF[]);
+      if (d.vidrios) setVidrios(d.vidrios as VidrioItemPDF[]);
+      if (d.observaciones) setObservaciones(d.observaciones as string);
+      if (d.video) setVideo(d.video as VideoPDF);
+      if (d.firmas) setFirmas(d.firmas as FirmasPDF);
+      if (d.completedSections) setCompletedSections(new Set(d.completedSections as SectionId[]));
+    };
+    load();
+    return () => { cancelled = true; };
   }, [inspectionId, profile?.full_name, profile?.id, today]);
 
   // ─── Auto-populate inspector name from profile ────────────────────────────
@@ -293,10 +348,6 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
       color: datosGenerales.color || 'N/A',
       propietario: datosGenerales.propietario || 'N/A',
       fecha: datosGenerales.fecha || today,
-      // NOTE: intentionally no `status` here. Content saves (autosave, Guardar)
-      // must never change the workflow status — only submitForReview /
-      // approveInspection / rejectInspection / finalizeInspection /
-      // unlockInspection / archiveInspection do that, each with its own rules.
       seccionesCompletadas: completedSections.size,
       totalSecciones: sections.length,
       inspectorId: profile?.id || '',
@@ -325,7 +376,6 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
     if (isReadOnly) return;
     const payload = buildPayload();
 
-    // Instant save to IndexedDB (crash-safe)
     const draftKey = currentIdRef.current || `draft-new-${profile?.id || 'anon'}`;
     saveDraft({
       id: draftKey,
@@ -338,27 +388,26 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
       console.warn('Autosave draft failed:', err instanceof Error ? err.message : err);
     });
 
-    // Debounced save to localStorage + sync queue
     if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     autosaveTimerRef.current = setTimeout(() => {
       if (!payload.placa || payload.placa === 'S/P') return;
-
-      if (currentIdRef.current) {
-        const updated = updateInspection(currentIdRef.current, payload);
-        if (updated) enqueue('inspection', 'update', { ...updated }, updated.id);
-      } else {
-        const saved = saveInspection({ ...payload, status: 'activo' });
-        currentIdRef.current = saved.id;
-        enqueue('inspection', 'create', { ...saved }, saved.id);
-        // Clean up new-draft after first save
-        deleteDraft(`draft-new-${profile?.id || 'anon'}`).catch((err: unknown) => {
-          console.warn('No se pudo eliminar borrador:', err instanceof Error ? err.message : err);
-        });
-      }
+      void (async () => {
+        try {
+          if (currentIdRef.current) {
+            await InspectionsRepo.update(currentIdRef.current, toDBChanges(payload));
+          } else {
+            const saved = await InspectionsRepo.create(toDBCreate(payload));
+            currentIdRef.current = saved.id;
+            await deleteDraft(`draft-new-${profile?.id || 'anon'}`);
+          }
+          await queueInspectionMedia(currentIdRef.current!, payload.datos);
+        } catch (err) {
+          console.warn('Autosave de inspección falló:', err instanceof Error ? err.message : err);
+        }
+      })();
     }, 1500);
   }, [buildPayload, isReadOnly, profile?.id]);
 
-  // Trigger autosave when any section data changes
   useEffect(() => {
     triggerAutosave();
     return () => { if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current); };
@@ -381,13 +430,11 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
       const payload = buildPayload();
       let targetId = currentIdRef.current;
       if (targetId) {
-        const updated = updateInspection(targetId, payload);
-        if (updated) enqueue('inspection', 'update', { ...updated }, updated.id);
+        await InspectionsRepo.update(targetId, toDBChanges(payload));
         toast.success('Inspección guardada');
       } else {
-        const saved = saveInspection({ ...payload, status: 'activo' });
+        const saved = await InspectionsRepo.create(toDBCreate(payload));
         currentIdRef.current = saved.id;
-        enqueue('inspection', 'create', { ...saved }, saved.id);
         await deleteDraft(`draft-new-${profile?.id || 'anon'}`).catch((err: unknown) => {
           console.warn('No se pudo eliminar borrador:', err instanceof Error ? err.message : err);
         });
@@ -397,6 +444,7 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
           toast.success('Inspección guardada correctamente');
         }
       }
+      await queueInspectionMedia(currentIdRef.current!, payload.datos);
       onClose();
     } catch {
       toast.error('Error al guardar la inspección. Intente nuevamente.');
@@ -405,10 +453,6 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
     }
   };
 
-  // Inspector: sends the inspection to the admin for review. From here it's
-  // read-only until an admin approves it (→ completado) or rejects it
-  // (→ rechazado, back to the inspector). Approve/Reject/Finalizar/Archivar
-  // are admin-only actions and live in the inspections list, not here.
   const handleSubmitForReview = async () => {
     if (!datosGenerales.vehicleId) {
       toast.error('Seleccione un vehículo de Producción en Datos Generales antes de enviar a revisión');
@@ -426,6 +470,15 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
       setActiveSection('latoneria');
       return;
     }
+    if (completedSections.size !== sections.length) {
+      toast.error('Complete las 13 secciones antes de enviar la inspección a revisión.');
+      return;
+    }
+    if (!firmas.inspectorName.trim() || !firmas.clienteName.trim() || !firmas.inspectorSignature || !firmas.clienteSignature) {
+      toast.error('Registre los nombres y las dos firmas antes de enviar la inspección a revisión.');
+      setActiveSection('firmas');
+      return;
+    }
     if (!confirm('¿Enviar esta inspección a revisión? Ya no podrá editarla hasta que un administrador la apruebe o la rechace.')) return;
 
     setSubmitting(true);
@@ -433,20 +486,19 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
       const payload = buildPayload();
       let targetId = currentIdRef.current;
       if (targetId) {
-        const updated = updateInspection(targetId, payload);
-        if (updated) enqueue('inspection', 'update', { ...updated }, updated.id);
+        await InspectionsRepo.update(targetId, toDBChanges(payload));
       } else {
-        const saved = saveInspection({ ...payload, status: 'activo' });
+        const saved = await InspectionsRepo.create(toDBCreate(payload));
         targetId = saved.id;
         currentIdRef.current = saved.id;
-        enqueue('inspection', 'create', { ...saved }, saved.id);
         await deleteDraft(`draft-new-${profile?.id || 'anon'}`).catch((err: unknown) => {
           console.warn('No se pudo eliminar borrador:', err instanceof Error ? err.message : err);
         });
       }
-      const submitted = submitForReview(targetId!, profile?.id || '', datosGenerales.inspectorName || profile?.full_name || '');
-      if (submitted) {
-        enqueue('inspection', 'update', { ...submitted }, submitted.id);
+      if (typeof navigator !== 'undefined' && navigator.onLine) await processSyncQueue();
+      await queueInspectionMedia(targetId!, payload.datos);
+      const submitted = await InspectionsRepo.submitForReview(targetId!);
+      if (submitted.ok) {
         toast.success('Inspección enviada a revisión');
       } else {
         toast.error('No se pudo enviar a revisión — el estado actual no lo permite');
@@ -459,7 +511,7 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
     }
   };
 
-  const handleGeneratePDF = (overrideInsp?: Inspection) => {
+  const handleGeneratePDF = (overrideInsp?: InspectionView) => {
     const insp = overrideInsp ?? existingInspection;
     const now = new Date();
     const pdfData: InspectionPDFData = {
@@ -550,7 +602,6 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
 
   return (
       <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
-        {/* PDF Generation Modal */}
         {pdfProgress && (
             <PdfGenerationModal
                 progress={pdfProgress}
@@ -559,7 +610,6 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
             />
         )}
 
-        {/* Draft recovery banner */}
         {hasDraftRecovery && !inspectionId && (
             <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex items-center gap-2">
               <Icon name="CloudArrowDownIcon" size={16} className="text-blue-600 flex-shrink-0" />
@@ -607,7 +657,6 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
             </div>
         )}
 
-        {/* Header */}
         <div className="bg-[#1B4F72] text-white px-4 py-3 flex items-center gap-3 shadow-md">
           <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/10 transition-colors">
             <Icon name="XMarkIcon" size={22} className="text-white" />
@@ -623,7 +672,6 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
               )}
             </div>
           </div>
-          {/* Autosave indicator */}
           {lastSaved && !isReadOnly && (
               <SyncStatusBadge status="synced" compact className="opacity-80" />
           )}
@@ -643,7 +691,6 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
           </button>
         </div>
 
-        {/* Read-only banner — wording depends on where the record is in the review pipeline */}
         {isFinalized && (
             <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center gap-2">
               <Icon name="LockClosedIcon" size={16} className="text-amber-600 flex-shrink-0" />
@@ -679,12 +726,10 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
             </div>
         )}
 
-        {/* Progress bar */}
         <div className="h-1 bg-[#1B4F72]/20">
           <div className="h-1 bg-green-400 transition-all duration-300" style={{ width: `${((currentIndex + 1) / sections.length) * 100}%` }} />
         </div>
 
-        {/* Section menu overlay */}
         {showSectionMenu && (
             <div className="absolute top-16 right-0 left-0 z-50 bg-white shadow-xl border-b border-gray-100 max-h-80 overflow-y-auto">
               {sections.map((s, idx) => (
@@ -702,7 +747,6 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
             </div>
         )}
 
-        {/* Section tabs scroll */}
         <div className="bg-white border-b border-gray-100 px-4 py-2 overflow-x-auto scrollbar-hide">
           <div className="flex gap-2 min-w-max">
             {sections.map((s) => (
@@ -721,14 +765,12 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-y-auto">
           <div className="px-4 py-4 max-w-screen-2xl mx-auto">
             {renderSection()}
           </div>
         </div>
 
-        {/* Bottom navigation */}
         <div className="bg-white border-t border-gray-100 px-4 py-3 flex gap-2">
           <button
               onClick={goPrev}
@@ -755,9 +797,6 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
                   {saving ? <Icon name="ArrowPathIcon" size={16} className="text-white animate-spin" /> : <Icon name="CloudArrowUpIcon" size={16} className="text-white" />}
                   Guardar
                 </button>
-                {/* Whoever is editing (inspector, or admin after an Desbloquear
-                correction) sends it back to review — approve/reject/finalize/
-                archive/unlock remain admin-only actions in the list */}
                 <button
                     onClick={handleSubmitForReview}
                     disabled={submitting}

@@ -6,19 +6,9 @@ import SyncStatusBadge from '@/components/ui/SyncStatusBadge';
 import InspectionFormModal from './InspectionFormModal';
 import PdfGenerationModal from './PdfGenerationModal';
 import { toast } from 'sonner';
-import {
-  getInspections,
-  deleteInspection,
-  unlockInspection,
-  archiveInspection,
-  updateInspection,
-  approveInspection,
-  rejectInspection,
-  finalizeInspection,
-  type Inspection,
-  type InspectionStatus,
-} from '@/lib/store';
-import { enqueue } from '@/lib/syncQueue';
+import { InspectionsRepo } from '@/lib/repositories';
+import { migrateLegacyInspections } from '../../../lib/inspectionMigration';
+import { toInspectionView, type InspectionView } from '@/lib/inspectionView';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetworkSync } from '@/hooks/useNetworkSync';
 import {
@@ -28,12 +18,11 @@ import {
   type PDFGenerationProgress,
 } from '@/lib/inspectionPdfGenerator';
 import { createClient } from '@/lib/supabase/client';
-import { hydrateLegacyInspectionsFromCloud } from '@/lib/inspectionCloudBridge';
 import UsersSelectPanel from './UsersSelectPanel';
 
 // ─── Build PDF data from saved inspection ─────────────────────────────────────
 
-function buildPdfDataFromInspection(insp: Inspection, generationCount?: number): InspectionPDFData {
+function buildPdfDataFromInspection(insp: InspectionView, generationCount?: number): InspectionPDFData {
   const datos = (insp.datos ?? {}) as Record<string, unknown>;
   const now = new Date();
   const today = now.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -85,12 +74,18 @@ async function downloadServerPdf(localId: string, placa: string): Promise<{ succ
   try {
     const supabase = createClient();
 
-    // Look up the Supabase row by local_id
-    const { data: row, error } = await supabase
+    // New offline-first records use their UUID directly as id; legacy records
+    // may only be linked through local_id. Support both safely.
+    const { data: rowById, error: idError } = await supabase
         .from('inspections')
         .select('id')
-        .eq('local_id', localId)
+        .eq('id', localId)
         .maybeSingle();
+    const { data: rowByLocalId, error: localIdError } = rowById
+      ? { data: null, error: null }
+      : await supabase.from('inspections').select('id').eq('local_id', localId).maybeSingle();
+    const row = rowById ?? rowByLocalId;
+    const error = idError ?? localIdError;
 
     if (error || !row?.id) {
       return { success: false, error: 'Inspección no sincronizada aún. Guarda y sincroniza primero.' };
@@ -123,7 +118,7 @@ async function downloadServerPdf(localId: string, placa: string): Promise<{ succ
 // ─── Save PDF export record to Supabase ──────────────────────────────────────
 
 async function savePdfExportRecord(
-    insp: Inspection,
+    insp: InspectionView,
     generatedBy: string,
     generatedByName: string,
     isRegeneration: boolean
@@ -133,13 +128,16 @@ async function savePdfExportRecord(
     const now = new Date().toISOString();
     const filename = `BT-inspeccion-${insp.placa.replace(/[^a-zA-Z0-9]/g, '-')}-${now.slice(0, 10)}.html`;
 
-    // `insp.id` is a local identifier while this module is offline-first.
-    // Audit and export tables require the remote UUID FK, so resolve it first.
-    const { data: remoteInspection, error: inspectionError } = await supabase
+    const { data: remoteById, error: idError } = await supabase
       .from('inspections')
       .select('id')
-      .eq('local_id', insp.id)
+      .eq('id', insp.id)
       .maybeSingle();
+    const { data: remoteByLocalId, error: localIdError } = remoteById
+      ? { data: null, error: null }
+      : await supabase.from('inspections').select('id').eq('local_id', insp.id).maybeSingle();
+    const remoteInspection = remoteById ?? remoteByLocalId;
+    const inspectionError = idError ?? localIdError;
 
     if (inspectionError || !remoteInspection?.id) return;
 
@@ -238,7 +236,7 @@ function RejectDialog({ placa, onConfirm, onCancel }: { placa: string; onConfirm
 
 // ─── Admin Dashboard Panel ────────────────────────────────────────────────────
 
-function AdminDashboard({ inspections, onClose }: { inspections: Inspection[]; onClose: () => void }) {
+function AdminDashboard({ inspections, onClose }: { inspections: InspectionView[]; onClose: () => void }) {
   const pending = inspections.filter((i) => i.status === 'pendiente_revision');
   const rejected = inspections.filter((i) => i.status === 'rechazado');
   const failed = inspections.filter((i) => i.syncStatus === 'failed');
@@ -349,19 +347,19 @@ function AdminDashboard({ inspections, onClose }: { inspections: Inspection[]; o
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-type FilterStatus = 'all' | InspectionStatus;
+type FilterStatus = 'all' | string;
 
 export default function InspectionListView() {
   const { isAdmin, profile } = useAuth();
   const { isOnline, pendingCount, pendingMediaCount, isSyncing, syncStatus, runSync } = useNetworkSync();
-  const [inspections, setInspections] = useState<Inspection[]>([]);
+  const [inspections, setInspections] = useState<InspectionView[]>([]);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [showAuditId, setShowAuditId] = useState<string | null>(null);
   const [pdfProgress, setPdfProgress] = useState<PDFGenerationProgress | null>(null);
-  const [pendingPdfInsp, setPendingPdfInsp] = useState<Inspection | null>(null);
+  const [pendingPdfInsp, setPendingPdfInsp] = useState<InspectionView | null>(null);
   const [pendingPdfIsRegen, setPendingPdfIsRegen] = useState(false);
   const [unlockDialogId, setUnlockDialogId] = useState<string | null>(null);
   const [rejectDialogId, setRejectDialogId] = useState<string | null>(null);
@@ -369,13 +367,13 @@ export default function InspectionListView() {
   const [serverPdfLoadingId, setServerPdfLoadingId] = useState<string | null>(null);
 
   const loadInspections = useCallback(async () => {
-    try {
-      setInspections(await hydrateLegacyInspectionsFromCloud());
-    } catch {
-      // IndexedDB can be unavailable in private/restricted browsers; retain
-      // the offline local list rather than hiding inspections from the user.
-      setInspections(getInspections());
-    }
+    await migrateLegacyInspections();
+    const views = (await InspectionsRepo.getAll()).map(toInspectionView);
+    // The audit history remains in Supabase and is written by database
+    // triggers/RPCs. It is intentionally not fetched here: the deployed
+    // project is currently rejecting that endpoint without an API key, and a
+    // non-essential audit read must never block the inspections list or sync.
+    setInspections(views);
   }, []);
 
   useEffect(() => {
@@ -390,9 +388,9 @@ export default function InspectionListView() {
     loadInspections();
   };
 
-  const handleDelete = (id: string, placa: string) => {
+  const handleDelete = async (id: string, placa: string) => {
     if (!confirm(`¿Eliminar inspección de ${placa}? Esta acción no se puede deshacer.`)) return;
-    deleteInspection(id);
+    await InspectionsRepo.delete(id);
     loadInspections();
     toast.success('Inspección eliminada');
   };
@@ -402,12 +400,11 @@ export default function InspectionListView() {
     setUnlockDialogId(id);
   };
 
-  const confirmUnlock = (id: string, reason: string) => {
+  const confirmUnlock = async (id: string, reason: string) => {
     const insp = inspections.find((i) => i.id === id);
     if (!insp) return;
-    const unlocked = unlockInspection(id, profile?.id || '', reason, profile?.full_name);
-    if (unlocked) {
-      enqueue('inspection', 'unlock', { ...unlocked }, unlocked.id);
+    const unlocked = await InspectionsRepo.unlock(id, reason);
+    if (unlocked.ok) {
       loadInspections();
       toast.success(`Inspección de ${insp.placa} desbloqueada. Razón registrada en auditoría.`);
     } else {
@@ -416,38 +413,36 @@ export default function InspectionListView() {
     setUnlockDialogId(null);
   };
 
-  const handleArchive = (id: string, placa: string) => {
+  const handleArchive = async (id: string, placa: string) => {
     if (!isAdmin) return;
     if (!confirm(`¿Archivar la inspección de ${placa}?`)) return;
-    const archived = archiveInspection(id, profile?.id || '', profile?.full_name);
-    if (archived) {
-      enqueue('inspection', 'update', { ...archived }, archived.id);
+    const archived = await InspectionsRepo.archive(id);
+    if (archived.ok) {
       loadInspections();
       toast.success(`Inspección de ${placa} archivada`);
     }
   };
 
-  const handleFinalize = (id: string, placa: string) => {
+  const handleFinalize = async (id: string, placa: string) => {
     if (!isAdmin) return;
     if (!confirm(`¿Finalizar la inspección de ${placa}? Quedará bloqueada de forma permanente — ni siquiera un administrador podrá editarla sin usar "Desbloquear" con motivo justificado.`)) return;
-    const finalized = finalizeInspection(id, profile?.id || '', profile?.full_name || '');
-    if (finalized) {
-      enqueue('inspection', 'finalize', { ...finalized }, finalized.id);
+    const finalized = await InspectionsRepo.finalize(id);
+    if (finalized.ok) {
       loadInspections();
       toast.success(`Inspección de ${placa} finalizada y bloqueada. Generando PDF...`);
       // Auto-generate the legal-evidence PDF right after finalizing, same as before
-      startPdfGeneration(finalized, false);
+      const refreshed = await InspectionsRepo.getById(id);
+      if (refreshed) startPdfGeneration(toInspectionView(refreshed), false);
     } else {
       toast.error('No se pudo finalizar — el estado actual no lo permite');
     }
   };
 
-  const handleApprove = (id: string, placa: string) => {
+  const handleApprove = async (id: string, placa: string) => {
     if (!isAdmin) return;
     if (!confirm(`¿Aprobar la inspección de ${placa}?`)) return;
-    const approved = approveInspection(id, profile?.id || '', profile?.full_name);
-    if (approved) {
-      enqueue('inspection', 'update', { ...approved }, approved.id);
+    const approved = await InspectionsRepo.approve(id);
+    if (approved.ok) {
       loadInspections();
       toast.success(`Inspección de ${placa} aprobada`);
     }
@@ -458,12 +453,11 @@ export default function InspectionListView() {
     setRejectDialogId(id);
   };
 
-  const confirmReject = (id: string, reason: string) => {
+  const confirmReject = async (id: string, reason: string) => {
     const insp = inspections.find((i) => i.id === id);
     if (!insp) return;
-    const rejected = rejectInspection(id, profile?.id || '', reason, profile?.full_name);
-    if (rejected) {
-      enqueue('inspection', 'update', { ...rejected }, rejected.id);
+    const rejected = await InspectionsRepo.reject(id, reason);
+    if (rejected.ok) {
       loadInspections();
       toast.success(`Inspección de ${insp.placa} rechazada`);
     }
@@ -472,7 +466,7 @@ export default function InspectionListView() {
 
   // ─── PDF generation ─────────────────────────────────────────────────────────
 
-  const startPdfGeneration = async (insp: Inspection, isRegeneration: boolean) => {
+  const startPdfGeneration = async (insp: InspectionView, isRegeneration: boolean) => {
     const currentCount = ((insp.datos as Record<string, unknown>)?.pdfGenerationCount as number) || 0;
     const newCount = currentCount + 1;
     const pdfData = buildPdfDataFromInspection(insp, newCount);
@@ -485,14 +479,14 @@ export default function InspectionListView() {
       const filename = `BT-inspeccion-${insp.placa.replace(/[^a-zA-Z0-9]/g, '-')}-${new Date().toISOString().slice(0, 10)}.html`;
       openPDFInPrintWindow(result.html, filename);
       setPdfProgress({ stage: 'done', message: 'PDF generado', percent: 100, totalImages: 0, loadedImages: 0, failedImages: result.failedImages });
-      updateInspection(insp.id, { datos: { ...(insp.datos as Record<string, unknown>), pdfGenerationCount: newCount } });
+      await InspectionsRepo.update(insp.id, { data: { ...(insp.datos as Record<string, unknown>), pdfGenerationCount: newCount } });
       savePdfExportRecord(insp, profile?.id || '', profile?.full_name || '', isRegeneration);
       if (isRegeneration) toast.success(`PDF regenerado para ${insp.placa} — Acción registrada en auditoría`);
       loadInspections();
     }
   };
 
-  const handleGeneratePdf = (insp: Inspection, isRegeneration = false) => {
+  const handleGeneratePdf = (insp: InspectionView, isRegeneration = false) => {
     if (isRegeneration && !isAdmin) { toast.error('Solo los administradores pueden regenerar PDFs finalizados'); return; }
     if (isRegeneration && !confirm(`¿Regenerar el PDF de la inspección ${insp.placa}? Esta acción quedará registrada.`)) return;
     setPendingPdfInsp(insp);
@@ -507,7 +501,7 @@ export default function InspectionListView() {
     startPdfGeneration(pendingPdfInsp, pendingPdfIsRegen);
   };
 
-  const handleServerPdfDownload = async (insp: Inspection) => {
+  const handleServerPdfDownload = async (insp: InspectionView) => {
     setServerPdfLoadingId(insp.id);
     try {
       const result = await downloadServerPdf(insp.id, insp.placa);
@@ -558,9 +552,7 @@ export default function InspectionListView() {
 
   const stats = {
     hoy: inspections.filter((i) => i.fecha === today).length,
-    // 'aprobado' is kept only for backward compatibility with older records —
-    // approveInspection now sets 'completado' directly in a single step.
-    completadas: inspections.filter((i) => i.status === 'completado' || i.status === 'finalizado' || i.status === 'aprobado').length,
+    completadas: inspections.filter((i) => i.status === 'aprobado' || i.status === 'finalizado').length,
     enProceso: inspections.filter((i) => i.status === 'activo' || i.status === 'borrador').length,
     revision: inspections.filter((i) => i.status === 'pendiente_revision').length,
     archivadas: inspections.filter((i) => i.status === 'archivado').length,
@@ -572,7 +564,7 @@ export default function InspectionListView() {
     { key: 'borrador', label: 'Borrador' },
     { key: 'pendiente_revision', label: '⏳ Revisión' },
     { key: 'rechazado', label: '✗ Rechazadas' },
-    { key: 'completado', label: 'Completadas' },
+    { key: 'aprobado', label: 'Aprobadas' },
     { key: 'finalizado', label: '🔒 Finalizadas' },
     { key: 'archivado', label: '📁 Archivadas' },
   ];
@@ -732,7 +724,7 @@ export default function InspectionListView() {
                           insp.status === 'archivado' ? 'border-l-4 border-l-purple-400 opacity-80' :
                               insp.status === 'pendiente_revision' ? 'border-l-4 border-l-orange-400' :
                                   insp.status === 'rechazado' ? 'border-l-4 border-l-red-400' :
-                                      insp.status === 'completado' || insp.status === 'aprobado' ? 'border-l-4 border-l-green-400' : ''
+                                      insp.status === 'aprobado' ? 'border-l-4 border-l-green-400' : ''
                   }`}
               >
                 <div className="flex items-start justify-between mb-2">
@@ -820,7 +812,7 @@ export default function InspectionListView() {
                                                   entry.action === 'rejected' ? 'bg-red-100 text-red-700' :
                                                       entry.action === 'submitted_for_review'? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'
                       }`}>{entry.action}</span>
-                              <span className="text-gray-600">{entry.performedByName || entry.performedBy.slice(-8)}</span>
+                              <span className="text-gray-600">{entry.performedByName || 'Sistema'}</span>
                               {entry.details && <span className="text-gray-400 truncate max-w-[120px]">{entry.details}</span>}
                               <span className="text-gray-400 ml-auto flex-shrink-0">{new Date(entry.timestamp).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
                             </div>
@@ -839,7 +831,7 @@ export default function InspectionListView() {
                     <div
                         className={`h-2 rounded-full transition-all ${
                             insp.status === 'archivado' ? 'bg-purple-400' :
-                                insp.status === 'completado' || insp.status === 'aprobado' ? 'bg-green-500' :
+                                insp.status === 'aprobado' ? 'bg-green-500' :
                                     insp.status === 'rechazado'? 'bg-red-400' : insp.isLocked ?'bg-amber-400' :
                                         insp.seccionesCompletadas === insp.totalSecciones ? 'bg-green-500' : 'bg-[#1B4F72]'
                         }`}
@@ -854,7 +846,7 @@ export default function InspectionListView() {
                       className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#1B4F72] text-white text-sm font-semibold active:scale-95 transition-all min-w-0"
                   >
                     <Icon name={insp.isLocked || insp.status === 'archivado' ? 'EyeIcon' : 'PencilSquareIcon'} size={16} className="text-white" />
-                    {insp.isLocked || insp.status === 'archivado' ? 'Ver' : insp.status === 'completado' ? 'Ver/Editar' : 'Continuar'}
+                    {insp.isLocked || insp.status === 'archivado' ? 'Ver' : insp.status === 'aprobado' ? 'Ver' : 'Continuar'}
                   </button>
 
                   {/* Admin: Approve/Reject for pending review */}
@@ -878,7 +870,7 @@ export default function InspectionListView() {
                   )}
 
                   {/* Admin: Finalizar for approved/completed records */}
-                  {isAdmin && insp.status === 'completado' && (
+                  {isAdmin && insp.status === 'aprobado' && (
                       <button
                           onClick={() => handleFinalize(insp.id, insp.placa)}
                           className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-emerald-100 text-emerald-700 text-sm font-semibold active:scale-95 transition-all hover:bg-emerald-200"

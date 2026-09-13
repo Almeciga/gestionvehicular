@@ -37,7 +37,7 @@ export default function UsersManagementView() {
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
-      router.replace('/production-orders');
+      router.replace('/vehicle-inspection');
     }
   }, [authLoading, isAdmin, router]);
 
@@ -270,7 +270,6 @@ export default function UsersManagementView() {
                 >
                   <option value="inspector">Inspector</option>
                   <option value="admin">Administrador</option>
-                  <option value="comercial">Comercial</option>
                 </select>
               </div>
               <div className="flex gap-2 pt-2">
@@ -318,10 +317,9 @@ export default function UsersManagementView() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-gray-800 text-sm">{user.full_name}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
-                      user.role === 'admin' ?'bg-purple-100 text-purple-700'
-                        : user.role === 'comercial' ?'bg-amber-100 text-amber-700' :'bg-blue-100 text-blue-700'
+                      user.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
                     }`}>
-                      {user.role === 'admin' ? 'Admin' : user.role === 'comercial' ? 'Comercial' : 'Inspector'}
+                      {user.role === 'admin' ? 'Admin' : 'Inspector'}
                     </span>
                     {!user.is_active && (
                       <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-semibold">
@@ -356,7 +354,6 @@ export default function UsersManagementView() {
                 >
                   <option value="inspector">Inspector</option>
                   <option value="admin">Admin</option>
-                  <option value="comercial">Comercial</option>
                 </select>
                 <button
                   onClick={() => handleForcePasswordReset(user)}

@@ -4,24 +4,12 @@ import { NextResponse, type NextRequest } from 'next/server';
 // Public routes that don't require authentication
 const PUBLIC_ROUTES = ['/login', '/auth/callback', '/reset-password'];
 
-// Per-route role map: key = route prefix, value = allowed roles
-const ROUTE_ROLE_MAP: Record<string, string[]> = {
-  '/vehicle-inspection': ['admin', 'inspector'],
-  '/vehicle-production': ['admin', 'comercial'],
-  '/materials-management': ['admin'],
-  '/users-management': ['admin'],
-  '/logs': ['admin'],
-  '/production-orders': ['admin', 'comercial', 'inspector'],
-};
-
-// Home page per role (used after login and for unauthorized redirects)
-function getHomeForRole(role: string): string {
-  if (role === 'comercial') return '/production-orders';
-  return '/vehicle-inspection';
-}
+// Admin-only routes (inspectors are redirected away)
+const ADMIN_ROUTES = ['/users-management', '/materials-management', '/vehicle-production'];
 
 export async function middleware(request: NextRequest) {
   // PREVIEW ONLY: bypass all auth checks when PREVIEW_SKIP_AUTH is enabled
+  // This bypass is intentionally disabled in production for security
   if (
     process.env.PREVIEW_SKIP_AUTH === 'true' &&
     process.env.NODE_ENV !== 'production'
@@ -51,6 +39,7 @@ export async function middleware(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) => {
             request.cookies.set(name, value);
           });
+          // Create a new response to carry updated cookies forward
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) => {
             supabaseResponse.cookies.set(name, value, {
@@ -65,11 +54,13 @@ export async function middleware(request: NextRequest) {
     }
   );
 
+  // IMPORTANT: Do not run code between createServerClient and supabase.auth.getUser()
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
+  // Use exact match or segment-based matching to avoid false positives (e.g. /login-extra)
   const isPublicRoute = PUBLIC_ROUTES.some(
     (route) => pathname === route || pathname.startsWith(`${route}/`)
   );
@@ -89,12 +80,10 @@ export async function middleware(request: NextRequest) {
     return redirectResponse;
   }
 
-  // If authenticated and trying to access login, redirect to role home
+  // If authenticated and trying to access login, redirect to app
   if (user && pathname === '/login') {
-    const meta = user.user_metadata ?? {};
-    const role: string = (meta.role as string) || 'inspector';
     const url = request.nextUrl.clone();
-    url.pathname = getHomeForRole(role);
+    url.pathname = '/vehicle-inspection';
     const redirectResponse = NextResponse.redirect(url);
     supabaseResponse.cookies.getAll().forEach((cookie) => {
       redirectResponse.cookies.set(cookie.name, cookie.value, {
@@ -106,9 +95,13 @@ export async function middleware(request: NextRequest) {
     return redirectResponse;
   }
 
-  // For authenticated users on protected routes: check role
+  // For authenticated users on protected routes: read role/is_active from JWT user_metadata
+  // This avoids a DB round-trip to the profiles table on every request.
   if (user && !isPublicRoute) {
     const meta = user.user_metadata ?? {};
+
+    // user_metadata is populated by create-user route and kept in sync via profile triggers.
+    // Fall back to 'inspector' / true so existing users without metadata still work.
     const role: string = (meta.role as string) || 'inspector';
     const isActive: boolean = meta.is_active !== undefined ? Boolean(meta.is_active) : true;
 
@@ -116,29 +109,38 @@ export async function middleware(request: NextRequest) {
 
     if (!isActive) {
       console.warn('[middleware] User is inactive — signing out:', user.id);
-      await supabase.auth.signOut();
+      // Wrap signOut in a race against a timeout so a slow/unreachable Supabase
+      // doesn't cause the serverless function to exceed Netlify's timeout → 502.
+      try {
+        await Promise.race([
+          supabase.auth.signOut(),
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error('signOut timeout')), 3000)
+          ),
+        ]);
+      } catch {
+        // Proceed to redirect even if signOut fails — the cookie will expire naturally
+      }
+
       const url = request.nextUrl.clone();
       url.pathname = '/login';
       return NextResponse.redirect(url);
     }
 
-    // Check per-route role map
-    for (const [routePrefix, allowedRoles] of Object.entries(ROUTE_ROLE_MAP)) {
-      if (pathname === routePrefix || pathname.startsWith(`${routePrefix}/`)) {
-        if (!allowedRoles.includes(role)) {
-          const url = request.nextUrl.clone();
-          url.pathname = getHomeForRole(role);
-          const redirectResponse = NextResponse.redirect(url);
-          supabaseResponse.cookies.getAll().forEach((cookie) => {
-            redirectResponse.cookies.set(cookie.name, cookie.value, {
-              sameSite: 'lax',
-              secure: true,
-              path: '/',
-            });
+    // Protect admin-only routes using the JWT role
+    if (ADMIN_ROUTES.some((route) => pathname.startsWith(route))) {
+      if (role !== 'admin') {
+        const url = request.nextUrl.clone();
+        url.pathname = '/vehicle-inspection';
+        const redirectResponse = NextResponse.redirect(url);
+        supabaseResponse.cookies.getAll().forEach((cookie) => {
+          redirectResponse.cookies.set(cookie.name, cookie.value, {
+            sameSite: 'lax',
+            secure: true,
+            path: '/',
           });
-          return redirectResponse;
-        }
-        break;
+        });
+        return redirectResponse;
       }
     }
   }

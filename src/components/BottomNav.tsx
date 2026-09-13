@@ -7,60 +7,22 @@ import { useAuth } from '@/contexts/AuthContext';
 
 export default function BottomNav() {
   const pathname = usePathname();
-  const { isAdmin, isInspector, isComercial, loading } = useAuth();
+  const { isAdmin, loading } = useAuth();
 
   const allNavItems = [
-    {
-      href: '/vehicle-inspection',
-      label: 'Inspecciones',
-      icon: 'ClipboardDocumentCheckIcon' as const,
-      roles: ['admin', 'inspector'],
-    },
-    {
-      href: '/vehicle-production',
-      label: 'Producción',
-      icon: 'WrenchScrewdriverIcon' as const,
-      roles: ['admin', 'comercial'],
-    },
-    {
-      href: '/production-orders',
-      label: 'Órdenes',
-      icon: 'ClipboardDocumentListIcon' as const,
-      roles: ['admin', 'comercial', 'inspector'],
-    },
-    {
-      href: '/materials-management',
-      label: 'Materiales',
-      icon: 'CubeIcon' as const,
-      roles: ['admin'],
-    },
-    {
-      href: '/users-management',
-      label: 'Usuarios',
-      icon: 'UsersIcon' as const,
-      roles: ['admin'],
-    },
-    {
-      href: '/logs',
-      label: 'Logs',
-      icon: 'ExclamationTriangleIcon' as const,
-      roles: ['admin'],
-    },
+    { href: '/vehicle-inspection', label: 'Inspecciones', icon: 'ClipboardDocumentCheckIcon' as const, adminOnly: false },
+    { href: '/vehicle-production', label: 'Producción', icon: 'WrenchScrewdriverIcon' as const, adminOnly: true },
+    { href: '/materials-management', label: 'Materiales', icon: 'CubeIcon' as const, adminOnly: true },
+    { href: '/users-management', label: 'Usuarios', icon: 'UsersIcon' as const, adminOnly: true },
+    { href: '/logs', label: 'Logs', icon: 'ExclamationTriangleIcon' as const, adminOnly: true },
   ];
 
-  const currentRole = loading
-    ? null
+  // Show all items for admin, only inspections for inspector
+  const navItems = loading
+    ? allNavItems.filter((i) => !i.adminOnly)
     : isAdmin
-    ? 'admin'
-    : isComercial
-    ? 'comercial'
-    : isInspector
-    ? 'inspector'
-    : null;
-
-  const navItems = allNavItems.filter((item) =>
-    currentRole ? item.roles.includes(currentRole) : false
-  );
+    ? allNavItems
+    : allNavItems.filter((i) => !i.adminOnly);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 shadow-lg">

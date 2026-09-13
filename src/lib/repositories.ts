@@ -4,12 +4,65 @@ import {
   type DBMaterial,
   type DBInspection,
   type DBProfile,
-  type DBProductionOrder,
-  type DBPOCliente,
-  type DBPOCatalogItem,
-  type DBPOPiezaVidrio,
 } from '@/lib/db';
 import { enqueueOperation } from '@/lib/syncService';
+import { createClient } from '@/lib/supabase/client';
+import { validateInspectionChanges } from '@/lib/inspectionValidation';
+
+function isOnline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine;
+}
+
+export type TransitionResult = { ok: true } | { ok: false; error: string };
+
+/**
+ * Ejecuta una transición de estado. Si hay conexión, llama la RPC directamente
+ * (que valida rol y estado de origen en el servidor) y aplica el resultado
+ * localmente. Si no hay conexión, aplica el cambio localmente de forma
+ * optimista y encola la RPC para que syncService la ejecute al reconectar.
+ */
+async function runTransition(id: string, rpcName: string,rpcArgs: Record<string, unknown>, optimisticChanges: Partial<DBInspection>
+): Promise<TransitionResult> {
+  const db = getDB();
+  const existing = await db.inspections.get(id);
+  if (!existing) return { ok: false, error: 'Inspección local no encontrada.' };
+  const now = new Date().toISOString();
+
+  if (isOnline()) {
+    const supabase = createClient();
+    const { error } = await supabase.rpc(rpcName, rpcArgs);
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+    // La RPC modificó el registro remoto; el trigger de Supabase incrementó
+    // su version. Sin este refresh, la siguiente edición normal compararía
+    // contra un base_version desactualizado y generaría falsos "conflictos".
+    const { data: refreshed, error: refreshError } = await supabase
+      .from('inspections').select('*').eq('id', id).maybeSingle();
+    if (!refreshError && refreshed) {
+      const remote = refreshed as DBInspection;
+      await db.inspections.put({ ...remote, _synced_at: Date.now(), _dirty: false, sync_status: 'synced', base_version: remote.version ?? 1 });
+    } else {
+      // The transition already succeeded. Preserve an honest local pending state
+      // instead of claiming server generated metadata was synchronized.
+      await db.inspections.update(id, { ...optimisticChanges, updated_at: now, sync_status: 'pending', _dirty: true });
+    }
+    return { ok: true };
+  }
+
+  // Offline: aplicar optimista + encolar para ejecutar la RPC al reconectar
+  await db.inspections.update(id, {
+    ...optimisticChanges,
+    updated_at: now,
+    sync_status: 'pending',
+    _dirty: true,
+  });
+  await enqueueOperation('inspections', 'RPC', id, {
+    rpc_name: rpcName,
+    rpc_args: rpcArgs,
+  });
+  return { ok: true };
+}
 
 // ─── Profiles Repository ──────────────────────────────────────────────────────
 
@@ -39,6 +92,7 @@ export const ProfilesRepo = {
     const now = new Date().toISOString();
     const updated = { ...changes, updated_at: now, _dirty: true };
     await db.profiles.update(id, updated);
+    // Strip local-only bookkeeping fields before enqueueing for Supabase sync
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { _dirty, _synced_at, ...cleanPayload } = updated as Record<string, unknown>;
     await enqueueOperation('profiles', 'UPDATE', id, cleanPayload);
@@ -71,14 +125,8 @@ export const VehiclesRepo = {
   async search(query: string): Promise<DBVehicle[]> {
     const db = getDB();
     const q = query.toLowerCase();
-    return db.vehicles
-      .filter(
-        (v) =>
-          v.placa?.toLowerCase().includes(q) ||
-          v.marca?.toLowerCase().includes(q) ||
-          v.propietario?.toLowerCase().includes(q)
-      )
-      .toArray();
+    return db.vehicles.filter((v) => v.placa?.toLowerCase().includes(q) || v.marca?.toLowerCase().includes(q) || v.propietario?.toLowerCase().includes(q)
+    ) .toArray();
   },
 
   async create(vehicle: Omit<DBVehicle, '_synced_at' | '_dirty'>): Promise<DBVehicle> {
@@ -92,6 +140,7 @@ export const VehiclesRepo = {
       _synced_at: undefined,
     };
     await db.vehicles.put(record);
+    // Strip local-only bookkeeping fields before enqueueing for Supabase sync
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { _dirty, _synced_at, ...cleanPayload } = record as unknown as Record<string, unknown>;
     await enqueueOperation('vehicles', 'INSERT', record.id, cleanPayload);
@@ -141,9 +190,7 @@ export const MaterialsRepo = {
   async search(query: string): Promise<DBMaterial[]> {
     const db = getDB();
     const q = query.toLowerCase();
-    return db.materials
-      .filter((m) => m.nombre?.toLowerCase().includes(q) || m.categoria?.toLowerCase().includes(q))
-      .toArray();
+    return db.materials.filter((m) => m.nombre?.toLowerCase().includes(q) || m.categoria?.toLowerCase().includes(q)).toArray();
   },
 
   async create(material: Omit<DBMaterial, '_synced_at' | '_dirty'>): Promise<DBMaterial> {
@@ -157,6 +204,7 @@ export const MaterialsRepo = {
       _synced_at: undefined,
     };
     await db.materials.put(record);
+    // Strip local-only bookkeeping fields before enqueueing for Supabase sync
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { _dirty, _synced_at, ...cleanPayload } = record as unknown as Record<string, unknown>;
     await enqueueOperation('materials', 'INSERT', record.id, cleanPayload);
@@ -208,38 +256,39 @@ export const InspectionsRepo = {
     return db.inspections.where('inspector_id').equals(inspectorId).reverse().sortBy('updated_at');
   },
 
+  async getOpenForVehicle(vehicleId: string): Promise<DBInspection | undefined> {
+    const db = getDB();
+    return db.inspections
+      .filter((inspection) => {
+        const data = inspection.data as Record<string, unknown>;
+        return data?.vehicleId === vehicleId && inspection.status !== 'finalizado' && inspection.status !== 'archivado';
+      })
+      .first();
+  },
+
   async search(query: string, status?: string): Promise<DBInspection[]> {
     const db = getDB();
     const q = query.toLowerCase();
-    return db.inspections
-      .filter((i): boolean => {
-        const matchQuery =
-          !q ||
-          Boolean(
-            i.placa?.toLowerCase().includes(q) ||
-            i.propietario?.toLowerCase().includes(q) ||
-            i.marca?.toLowerCase().includes(q) ||
-            i.enterprise_id?.toLowerCase().includes(q) ||
-            i.inspector_name?.toLowerCase().includes(q)
-          );
-        const matchStatus = !status || status === 'all' || i.status === status;
-        return matchQuery && matchStatus;
-      })
-      .toArray();
+    return db.inspections.filter((i): boolean => {const matchQuery = !q || Boolean(i.placa?.toLowerCase().includes(q) || i.propietario?.toLowerCase().includes(q) || i.marca?.toLowerCase().includes(q) || i.enterprise_id?.toLowerCase().includes(q) || i.inspector_name?.toLowerCase().includes(q));const matchStatus = !status || status === 'all' || i.status === status;return matchQuery && matchStatus;}).toArray();
   },
 
-  async create(inspection: Omit<DBInspection, '_synced_at' | '_dirty'>): Promise<DBInspection> {
+  async create(inspection: Omit<DBInspection, '_synced_at' | '_dirty' | 'version' | 'base_version'>
+  ): Promise<DBInspection> {
     const db = getDB();
     const now = new Date().toISOString();
+    const validated = validateInspectionChanges(inspection, { creating: true });
     const record: DBInspection = {
-      ...inspection,
+      ...validated as DBInspection,
       created_at: inspection.created_at || now,
       updated_at: now,
       sync_status: 'pending',
+      version: 1,
+      base_version: 1,
       _dirty: true,
       _synced_at: undefined,
     };
     await db.inspections.put(record);
+    // Strip local-only bookkeeping fields before enqueueing for Supabase sync
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { _dirty, _synced_at, ...cleanPayload } = record as unknown as Record<string, unknown>;
     await enqueueOperation('inspections', 'INSERT', record.id, cleanPayload);
@@ -248,12 +297,39 @@ export const InspectionsRepo = {
 
   async update(id: string, changes: Partial<DBInspection>): Promise<void> {
     const db = getDB();
+    const existing = await db.inspections.get(id);
+    if (!existing) throw new Error('Inspección local no encontrada.');
+    const validated = validateInspectionChanges(changes);
+    if (
+      validated.secciones_completadas !== undefined &&
+      validated.secciones_completadas > (validated.total_secciones ?? existing.total_secciones)
+    ) throw new Error('secciones_completadas no puede superar total_secciones.');
+    if (
+      validated.total_secciones !== undefined &&
+      (validated.secciones_completadas ?? existing.secciones_completadas) > validated.total_secciones
+    ) throw new Error('total_secciones no puede ser menor que secciones_completadas.');
     const now = new Date().toISOString();
-    const updated = { ...changes, updated_at: now, _dirty: true };
+    const updated = { ...validated, updated_at: now, _dirty: true };
     await db.inspections.update(id, updated);
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { _dirty, _synced_at, ...cleanPayload } = updated as Record<string, unknown>;
-    await enqueueOperation('inspections', 'UPDATE', id, cleanPayload);
+
+    // Snapshot de los valores previos de los campos que cambian + version
+    // conocida al momento de la edición. syncService los usa para decidir
+    // si un conflicto remoto realmente choca con estos campos o si puede
+    // auto-mergear con seguridad. Se limpian antes de llegar a Supabase.
+    const previousValues: Record<string, unknown> = {};
+    if (existing) {
+      Object.keys(validated).forEach((k) => {
+        previousValues[k] = (existing as unknown as Record<string, unknown>)[k];
+      });
+    }
+
+    await enqueueOperation('inspections', 'UPDATE', id, {
+      ...cleanPayload,
+      _previous: previousValues,
+      _base_version: existing?.base_version ?? existing?.version ?? 1,
+    });
   },
 
   async delete(id: string): Promise<void> {
@@ -271,220 +347,56 @@ export const InspectionsRepo = {
     const db = getDB();
     return db.inspections.where('status').equals(status).count();
   },
-};
 
-// ─── Production Orders Repository ─────────────────────────────────────────────
+  // ── Transiciones de estado ──────────────────────────────────────────────
+  // Único punto de entrada para cambios de status. Nunca usar update() para
+  // esto: la BD tiene un guard que rechaza cambios de status fuera de estas RPC.
 
-export const ProductionOrdersRepo = {
-  async getAll(): Promise<DBProductionOrder[]> {
-    const db = getDB();
-    return db.production_orders.orderBy('updated_at').reverse().toArray();
+  async submitForReview(id: string): Promise<TransitionResult> {
+    return runTransition(id, 'submit_for_review', { p_inspection_id: id }, {status: 'pendiente_revision',});
   },
 
-  async getById(id: string): Promise<DBProductionOrder | undefined> {
-    const db = getDB();
-    return db.production_orders.get(id);
+  async approve(id: string): Promise<TransitionResult> {
+    return runTransition(id, 'approve_inspection', { p_inspection_id: id }, {status: 'aprobado',});
   },
 
-  async search(query: string, status?: string): Promise<DBProductionOrder[]> {
-    const db = getDB();
-    const q = query.toLowerCase();
-    return db.production_orders
-      .filter((o): boolean => {
-        const matchQuery =
-          !q ||
-          Boolean(
-            o.numero_orden?.toLowerCase().includes(q) ||
-            o.cliente_nombre?.toLowerCase().includes(q) ||
-            o.modelo_nombre?.toLowerCase().includes(q) ||
-            o.pais?.toLowerCase().includes(q)
-          );
-        const matchStatus = !status || status === 'all' || o.status === status;
-        return matchQuery && matchStatus;
-      })
-      .toArray();
-  },
-
-  async create(order: Omit<DBProductionOrder, '_synced_at' | '_dirty'>): Promise<DBProductionOrder> {
-    const db = getDB();
-    const now = new Date().toISOString();
-    const record: DBProductionOrder = {
-      ...order,
-      created_at: order.created_at || now,
-      updated_at: now,
-      _dirty: true,
-      _synced_at: undefined,
+  async reject(id: string, reason: string): Promise<TransitionResult> {
+    const optimisticChanges: Partial<DBInspection> = {
+      status: 'rechazado',
+      rejection_reason: reason,
     };
-    await db.production_orders.put(record);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { _dirty, _synced_at, items, ...cleanPayload } = record as unknown as Record<string, unknown>;
-    await enqueueOperation('production_orders', 'INSERT', record.id, cleanPayload);
-    return record;
+    return runTransition(
+        id,
+        'reject_inspection',
+        { p_inspection_id: id, p_reason: reason },
+        optimisticChanges
+    );
   },
 
-  async update(id: string, changes: Partial<DBProductionOrder>): Promise<void> {
-    const db = getDB();
-    const now = new Date().toISOString();
-    const updated = { ...changes, updated_at: now, _dirty: true };
-    await db.production_orders.update(id, updated);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { _dirty, _synced_at, items, ...cleanPayload } = updated as Record<string, unknown>;
-    await enqueueOperation('production_orders', 'UPDATE', id, cleanPayload);
+  async finalize(id: string): Promise<TransitionResult> {
+    return runTransition(id, 'finalize_inspection', { p_inspection_id: id }, {
+      status: 'finalizado',
+      is_locked: true,
+    });
   },
 
-  async delete(id: string): Promise<void> {
-    const db = getDB();
-    await db.production_orders.delete(id);
-    await enqueueOperation('production_orders', 'DELETE', id, { id });
+  async unlock(id: string, reason: string): Promise<TransitionResult> {
+    const optimisticChanges: Partial<DBInspection> = {
+      status: 'activo',
+      is_locked: false,
+      unlock_reason: reason,
+    };
+    return runTransition(
+        id,
+        'admin_unlock_inspection',
+        { p_inspection_id: id, p_reason: reason },
+        optimisticChanges
+    );
   },
 
-  async count(): Promise<number> {
-    const db = getDB();
-    return db.production_orders.count();
-  },
-};
-
-// ─── PO Catalog Repository ────────────────────────────────────────────────────
-
-export const POCatalogRepo = {
-  // Clientes
-  async getClientes(): Promise<DBPOCliente[]> {
-    const db = getDB();
-    return db.po_clientes.orderBy('nombre').toArray();
-  },
-  async upsertCliente(item: DBPOCliente): Promise<void> {
-    const db = getDB();
-    await db.po_clientes.put(item);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { _synced_at, ...clean } = item as unknown as Record<string, unknown>;
-    await enqueueOperation('po_clientes', item.id ? 'UPDATE' : 'INSERT', item.id, clean);
-  },
-  async saveCliente(item: Omit<DBPOCliente, '_synced_at'>): Promise<DBPOCliente> {
-    const db = getDB();
-    const now = new Date().toISOString();
-    const record: DBPOCliente = { ...item, updated_at: now, created_at: item.created_at || now };
-    await db.po_clientes.put(record);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { _synced_at, ...clean } = record as unknown as Record<string, unknown>;
-    const op = item.id ? 'UPDATE' : 'INSERT';
-    await enqueueOperation('po_clientes', op, record.id, clean);
-    return record;
-  },
-
-  // Modelos
-  async getModelos(): Promise<DBPOCatalogItem[]> {
-    const db = getDB();
-    return db.po_modelos_vehiculo.orderBy('orden').toArray();
-  },
-  async saveModelo(item: Omit<DBPOCatalogItem, '_synced_at'>): Promise<DBPOCatalogItem> {
-    const db = getDB();
-    const now = new Date().toISOString();
-    const record: DBPOCatalogItem = { ...item, updated_at: now, created_at: item.created_at || now };
-    await db.po_modelos_vehiculo.put(record);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { _synced_at, ...clean } = record as unknown as Record<string, unknown>;
-    await enqueueOperation('po_modelos_vehiculo', item.id ? 'UPDATE' : 'INSERT', record.id, clean);
-    return record;
-  },
-
-  // Niveles NIJ
-  async getNiveles(): Promise<DBPOCatalogItem[]> {
-    const db = getDB();
-    return db.po_niveles_nij.orderBy('orden').toArray();
-  },
-  async saveNivel(item: Omit<DBPOCatalogItem, '_synced_at'>): Promise<DBPOCatalogItem> {
-    const db = getDB();
-    const now = new Date().toISOString();
-    const record: DBPOCatalogItem = { ...item, updated_at: now, created_at: item.created_at || now };
-    await db.po_niveles_nij.put(record);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { _synced_at, ...clean } = record as unknown as Record<string, unknown>;
-    await enqueueOperation('po_niveles_nij', item.id ? 'UPDATE' : 'INSERT', record.id, clean);
-    return record;
-  },
-
-  // Formas de pago
-  async getFormasPago(): Promise<DBPOCatalogItem[]> {
-    const db = getDB();
-    return db.po_formas_pago.orderBy('orden').toArray();
-  },
-  async saveFormaPago(item: Omit<DBPOCatalogItem, '_synced_at'>): Promise<DBPOCatalogItem> {
-    const db = getDB();
-    const now = new Date().toISOString();
-    const record: DBPOCatalogItem = { ...item, updated_at: now, created_at: item.created_at || now };
-    await db.po_formas_pago.put(record);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { _synced_at, ...clean } = record as unknown as Record<string, unknown>;
-    await enqueueOperation('po_formas_pago', item.id ? 'UPDATE' : 'INSERT', record.id, clean);
-    return record;
-  },
-
-  // Incoterms
-  async getIncoterms(): Promise<DBPOCatalogItem[]> {
-    const db = getDB();
-    return db.po_incoterms.orderBy('orden').toArray();
-  },
-  async saveIncoterm(item: Omit<DBPOCatalogItem, '_synced_at'>): Promise<DBPOCatalogItem> {
-    const db = getDB();
-    const now = new Date().toISOString();
-    const record: DBPOCatalogItem = { ...item, updated_at: now, created_at: item.created_at || now };
-    await db.po_incoterms.put(record);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { _synced_at, ...clean } = record as unknown as Record<string, unknown>;
-    await enqueueOperation('po_incoterms', item.id ? 'UPDATE' : 'INSERT', record.id, clean);
-    return record;
-  },
-
-  // Piezas de vidrio
-  async getPiezas(): Promise<DBPOPiezaVidrio[]> {
-    const db = getDB();
-    return db.po_piezas_vidrio.orderBy('orden').toArray();
-  },
-  async savePieza(item: Omit<DBPOPiezaVidrio, '_synced_at'>): Promise<DBPOPiezaVidrio> {
-    const db = getDB();
-    const now = new Date().toISOString();
-    const record: DBPOPiezaVidrio = { ...item, updated_at: now, created_at: item.created_at || now };
-    await db.po_piezas_vidrio.put(record);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { _synced_at, ...clean } = record as unknown as Record<string, unknown>;
-    await enqueueOperation('po_piezas_vidrio', item.id ? 'UPDATE' : 'INSERT', record.id, clean);
-    return record;
-  },
-
-  // Tipos de marcación
-  async getMarcaciones(): Promise<DBPOCatalogItem[]> {
-    const db = getDB();
-    return db.po_tipos_marcacion.orderBy('orden').toArray();
-  },
-  async saveMarcacion(item: Omit<DBPOCatalogItem, '_synced_at'>): Promise<DBPOCatalogItem> {
-    const db = getDB();
-    const now = new Date().toISOString();
-    const record: DBPOCatalogItem = { ...item, updated_at: now, created_at: item.created_at || now };
-    await db.po_tipos_marcacion.put(record);
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { _synced_at, ...clean } = record as unknown as Record<string, unknown>;
-    await enqueueOperation('po_tipos_marcacion', item.id ? 'UPDATE' : 'INSERT', record.id, clean);
-    return record;
-  },
-
-  // Bulk upsert for sync
-  async bulkUpsertCatalogs(data: {
-    clientes?: DBPOCliente[];
-    modelos?: DBPOCatalogItem[];
-    niveles?: DBPOCatalogItem[];
-    formasPago?: DBPOCatalogItem[];
-    incoterms?: DBPOCatalogItem[];
-    piezas?: DBPOPiezaVidrio[];
-    marcaciones?: DBPOCatalogItem[];
-  }): Promise<void> {
-    const db = getDB();
-    const now = Date.now();
-    if (data.clientes?.length) await db.po_clientes.bulkPut(data.clientes.map((i) => ({ ...i, _synced_at: now })));
-    if (data.modelos?.length) await db.po_modelos_vehiculo.bulkPut(data.modelos.map((i) => ({ ...i, _synced_at: now })));
-    if (data.niveles?.length) await db.po_niveles_nij.bulkPut(data.niveles.map((i) => ({ ...i, _synced_at: now })));
-    if (data.formasPago?.length) await db.po_formas_pago.bulkPut(data.formasPago.map((i) => ({ ...i, _synced_at: now })));
-    if (data.incoterms?.length) await db.po_incoterms.bulkPut(data.incoterms.map((i) => ({ ...i, _synced_at: now })));
-    if (data.piezas?.length) await db.po_piezas_vidrio.bulkPut(data.piezas.map((i) => ({ ...i, _synced_at: now })));
-    if (data.marcaciones?.length) await db.po_tipos_marcacion.bulkPut(data.marcaciones.map((i) => ({ ...i, _synced_at: now })));
+  async archive(id: string): Promise<TransitionResult> {
+    return runTransition(id, 'archive_inspection', { p_inspection_id: id }, {
+      status: 'archivado',
+    });
   },
 };

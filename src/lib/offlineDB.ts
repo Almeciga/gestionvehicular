@@ -27,6 +27,7 @@ export interface MediaUploadItem {
   retries: number;
   maxRetries: number;
   uploadedUrl?: string;
+  storagePath?: string;
   errorMessage?: string;
   createdAt: number;
   lastAttempt?: number;
@@ -124,13 +125,11 @@ export function computeChecksum(dataUrl: string): string {
   return Math.abs(hash).toString(36);
 }
 
-export async function enqueueMedia(item: Omit<MediaUploadItem, 'id' | 'retries' | 'status' | 'createdAt'>): Promise<MediaUploadItem> {
+export async function enqueueMedia(item: Omit<MediaUploadItem, 'id' | 'retries' | 'status' | 'createdAt' | 'maxRetries'>): Promise<MediaUploadItem> {
   const checksum = computeChecksum(item.dataUrl);
   // Check for duplicate
   const existing = await getMediaByChecksum(checksum);
-  if (existing && existing.status === 'done') {
-    return existing; // already uploaded
-  }
+  if (existing && existing.inspectionId === item.inspectionId && existing.fieldPath === item.fieldPath) return existing;
 
   const newItem: MediaUploadItem = {
     ...item,

@@ -64,22 +64,6 @@ export const queryKeys = {
     search: (q: string, status?: string) => [...queryKeys.inspections.all, 'search', q, status] as const,
     byInspector: (id: string) => [...queryKeys.inspections.all, 'inspector', id] as const,
   },
-  productionOrders: {
-    all: ['productionOrders'] as const,
-    list: () => [...queryKeys.productionOrders.all, 'list'] as const,
-    detail: (id: string) => [...queryKeys.productionOrders.all, 'detail', id] as const,
-    search: (q: string, status?: string) => [...queryKeys.productionOrders.all, 'search', q, status] as const,
-  },
-  poCatalogs: {
-    all: ['poCatalogs'] as const,
-    clientes: () => [...queryKeys.poCatalogs.all, 'clientes'] as const,
-    modelos: () => [...queryKeys.poCatalogs.all, 'modelos'] as const,
-    niveles: () => [...queryKeys.poCatalogs.all, 'niveles'] as const,
-    formasPago: () => [...queryKeys.poCatalogs.all, 'formasPago'] as const,
-    incoterms: () => [...queryKeys.poCatalogs.all, 'incoterms'] as const,
-    piezas: () => [...queryKeys.poCatalogs.all, 'piezas'] as const,
-    marcaciones: () => [...queryKeys.poCatalogs.all, 'marcaciones'] as const,
-  },
   sync: {
     queue: ['sync', 'queue'] as const,
     metrics: ['sync', 'metrics'] as const,

@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate role
-    const allowedRoles = ['admin', 'inspector', 'comercial'];
+    const allowedRoles = ['admin', 'inspector'];
 
     if (role && !allowedRoles.includes(role)) {
       return NextResponse.json(

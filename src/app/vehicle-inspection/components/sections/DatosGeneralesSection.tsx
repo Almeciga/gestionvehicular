@@ -114,6 +114,19 @@ export default function DatosGeneralesSection({ values, onChange, readOnly, insp
     onChange?.('vin', '');
   };
 
+// Arriba del componente, junto a los demás helpers
+  const isoToDDMMYYYY = (iso: string) => {
+    if (!iso) return '';
+    const [y, m, d] = iso.split('-');
+    return `${d}/${m}/${y}`;
+  };
+
+  const ddmmyyyyToISO = (ddmmyyyy: string) => {
+    if (!ddmmyyyy || !ddmmyyyy.includes('/')) return '';
+    const [d, m, y] = ddmmyyyy.split('/');
+    return `${y}-${m}-${d}`;
+  };
+
   return (
     <div className="space-y-4">
       <h3 className="text-base font-bold text-gray-800 flex items-center gap-2">
@@ -345,9 +358,9 @@ export default function DatosGeneralesSection({ values, onChange, readOnly, insp
       <div>
         <label className="form-label">Fecha de Inspección</label>
         <input
-          type="text"
-          value={values?.fecha ?? today}
-          onChange={handle('fecha')}
+          type="date"
+          value={ddmmyyyyToISO(values?.fecha ?? today)}
+          onChange={(e) => onChange?.('fecha', isoToDDMMYYYY(e.target.value))}
           className="form-input"
         />
       </div>

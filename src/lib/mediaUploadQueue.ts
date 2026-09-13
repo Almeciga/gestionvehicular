@@ -1,14 +1,48 @@
 import { createClient } from '@/lib/supabase/client';
 import { getPendingMediaItems, updateMediaItem, type MediaUploadItem } from '@/lib/offlineDB';
 
-
 // ─── Upload a single media item to Supabase Storage ───────────────────────
 
-async function uploadMediaItem(item: MediaUploadItem): Promise<{ success: boolean; url?: string; storagePath?: string; error?: string }> {
+async function uploadMediaItem(
+    item: MediaUploadItem
+): Promise<{ success: boolean; url?: string; storagePath?: string; error?: string }> {
   try {
     const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     if (!user) return { success: false, error: 'Not authenticated' };
+
+    // The metadata row has an FK to inspections. Do not upload an orphaned
+    // object while the offline inspection INSERT is still waiting in its queue.
+    const { data: inspection, error: inspectionError } = await supabase
+        .from('inspections')
+        .select('id')
+        .eq('id', item.inspectionId)
+        .maybeSingle();
+    if (inspectionError || !inspection) {
+      return {
+        success: false,
+        error: inspectionError?.message ?? 'La inspección aún no está sincronizada',
+      };
+    }
+
+    // Deduplicate by checksum if available
+    if (item.checksum) {
+      const { data: existing } = await supabase
+          .from('media_uploads')
+          .select('storage_path, storage_bucket')
+          .eq('inspection_id', item.inspectionId)
+          .eq('field_path', item.fieldPath)
+          .eq('checksum', item.checksum)
+          .eq('status', 'uploaded')
+          .maybeSingle();
+      if (existing) {
+        const bucket = existing.storage_bucket || 'inspection-photos';
+        const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(existing.storage_path);
+        return { success: true, url: urlData.publicUrl, storagePath: existing.storage_path };
+      }
+    }
 
     // Convert base64 data URL to Blob
     const response = await fetch(item.dataUrl);
@@ -20,22 +54,43 @@ async function uploadMediaItem(item: MediaUploadItem): Promise<{ success: boolea
       return { success: false, error: `File too large: ${Math.round(blob.size / 1024 / 1024)}MB` };
     }
 
-    // Use the "uploads" bucket as required
     const ext = item.mimeType.split('/')[1]?.replace('jpeg', 'jpg') || 'jpg';
     const isVideo = item.mimeType.startsWith('video/');
-    const bucket = 'uploads';
+    const bucket = 'inspection-photos';
     const folder = isVideo ? 'videos' : 'photos';
-    // Path: inspections/{inspectionId}/{photos|videos}/{fileName}-{timestamp}.{ext}
-    const storagePath = `inspections/${item.inspectionId}/${folder}/${item.fileName}-${Date.now()}.${ext}`;
 
-    const { error: uploadError } = await supabase.storage
-      .from(bucket)
-      .upload(storagePath, blob, {
-        contentType: item.mimeType,
-        upsert: false,
-      });
+    // Ruta determinística: un único archivo por inspección + campo.
+    // Sin timestamp: cada reintento o foto nueva SOBRESCRIBE la anterior
+    // en vez de dejar objetos huérfanos en el bucket.
+    const storagePath = `inspections/${item.inspectionId}/${folder}/${item.fieldPath}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage.from(bucket).upload(storagePath, blob, {
+      contentType: item.mimeType,
+      upsert: true, // sobrescribe si ya existe una foto/video de ese campo
+    });
 
     if (uploadError) return { success: false, error: uploadError.message };
+
+    // Upsert de metadata: si ya existía un registro para (inspection_id, field_path),
+    // se actualiza en vez de duplicarse.
+    const { error: metadataError } = await supabase.from('media_uploads').upsert(
+        {
+          inspection_id: item.inspectionId,
+          uploaded_by: user.id,
+          storage_path: storagePath,
+          storage_bucket: bucket,
+          mime_type: item.mimeType,
+          file_size_bytes: blob.size,
+          field_path: item.fieldPath,
+          checksum: item.checksum ?? null,
+          status: 'uploaded',
+        },
+        { onConflict: 'inspection_id, field_path' }
+    );
+
+    if (metadataError) {
+      return { success: false, error: metadataError.message };
+    }
 
     // Return the storage path (key) — signed URLs are generated server-side for PDF
     // Also return the public URL for immediate display if bucket allows it
@@ -75,7 +130,6 @@ export async function processMediaQueue(): Promise<{ uploaded: number; failed: n
         await updateMediaItem(item.id, {
           status: 'done',
           uploadedUrl: result.url,
-          // Store the storage path (key) for server-side signed URL generation
           ...(result.storagePath ? { storagePath: result.storagePath } : {}),
         });
         uploaded++;

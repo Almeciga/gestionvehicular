@@ -59,10 +59,16 @@ export function createClient() {
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error(
-      '[supabase] NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is not defined. ' +
-      'Check your .env file and restart the dev server.'
+    // Log clearly so the error appears in Netlify function logs.
+    // Do NOT throw here — a throw at module level during SSR/cold-start
+    // causes an unhandled exception → Netlify 502 "function crashed".
+    console.error(
+      '[supabase/client] NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is not defined. ' +
+      'Set these environment variables in your Netlify site settings → Environment variables.'
     );
+    // Return a minimal stub so the import chain doesn't crash the function.
+    // The UI will show "BD Sin conexión" and login attempts will fail gracefully.
+    return createBrowserClient('https://placeholder.supabase.co', 'placeholder') as ReturnType<typeof createBrowserClient>;
   }
 
   clientInstance = createBrowserClient(

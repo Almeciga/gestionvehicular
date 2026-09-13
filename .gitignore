@@ -34,4 +34,5 @@ jest-test-results.json
 .idea/
 
 # Optional: if using TurboRepo or monorepo
-turbo/
+turbo/.env 
+.env

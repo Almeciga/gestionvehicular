@@ -12,7 +12,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryClient';
 
 export default function VehicleProductionView() {
-  const { isAdmin, isComercial, loading: authLoading } = useAuth();
+  const { isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
@@ -20,19 +20,17 @@ export default function VehicleProductionView() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const canEdit = isAdmin; // comercial = read-only
-
   useEffect(() => {
-    if (!authLoading && !isAdmin && !isComercial) {
-      router.replace('/production-orders');
+    if (!authLoading && !isAdmin) {
+      router.replace('/vehicle-inspection');
     }
-  }, [authLoading, isAdmin, isComercial, router]);
+  }, [authLoading, isAdmin, router]);
 
   // Read from IndexedDB via TanStack Query
   const { data: vehicles = [], isLoading } = useQuery({
     queryKey: queryKeys.vehicles.list(),
     queryFn: () => VehiclesRepo.getAll(),
-    enabled: !authLoading && (isAdmin || isComercial),
+    enabled: !authLoading && isAdmin,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -74,7 +72,7 @@ export default function VehicleProductionView() {
     );
   }
 
-  if (!isAdmin && !isComercial) return null;
+  if (!isAdmin) return null;
 
   return (
     <div className="px-4 py-4 max-w-screen-2xl mx-auto">
@@ -110,15 +108,13 @@ export default function VehicleProductionView() {
             className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1B4F72]"
           />
         </div>
-        {canEdit && (
-          <button
-            onClick={() => { setEditingId(null); setShowForm(true); }}
-            className="btn-primary flex items-center gap-2 whitespace-nowrap"
-          >
-            <Icon name="PlusIcon" size={18} className="text-white" />
-            <span className="hidden sm:inline">Nuevo</span>
-          </button>
-        )}
+        <button
+          onClick={() => { setEditingId(null); setShowForm(true); }}
+          className="btn-primary flex items-center gap-2 whitespace-nowrap"
+        >
+          <Icon name="PlusIcon" size={18} className="text-white" />
+          <span className="hidden sm:inline">Nuevo</span>
+        </button>
       </div>
 
       {/* List */}
@@ -128,11 +124,9 @@ export default function VehicleProductionView() {
             <Icon name="TruckIcon" size={48} className="text-gray-300 mx-auto mb-3" />
             <p className="font-semibold text-gray-500">No hay vehículos en producción</p>
             <p className="text-sm text-gray-400 mt-1">Registra el primer vehículo para comenzar</p>
-            {canEdit && (
-              <button onClick={() => setShowForm(true)} className="btn-primary mt-4 mx-auto">
-                Nuevo Vehículo
-              </button>
-            )}
+            <button onClick={() => setShowForm(true)} className="btn-primary mt-4 mx-auto">
+              Nuevo Vehículo
+            </button>
           </div>
         )}
         {filtered.map((vehicle) => (
@@ -158,28 +152,26 @@ export default function VehicleProductionView() {
                 <span className="text-xs text-gray-400">{(vehicle.materials as unknown[])?.length || 0} material(es)</span>
               </div>
             </div>
-            {canEdit && (
-              <div className="flex gap-2 mt-3">
-                <button
-                  onClick={() => { setEditingId(vehicle.id); setShowForm(true); }}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#1B4F72] text-white text-sm font-semibold active:scale-95 transition-all"
-                >
-                  <Icon name="PencilSquareIcon" size={16} className="text-white" />
-                  Editar
-                </button>
-                <button
-                  onClick={() => setDeleteId(vehicle.id)}
-                  className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-semibold active:scale-95 transition-all hover:bg-red-100"
-                >
-                  <Icon name="TrashIcon" size={16} className="text-red-500" />
-                </button>
-              </div>
-            )}
+            <div className="flex gap-2 mt-3">
+              <button
+                onClick={() => { setEditingId(vehicle.id); setShowForm(true); }}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#1B4F72] text-white text-sm font-semibold active:scale-95 transition-all"
+              >
+                <Icon name="PencilSquareIcon" size={16} className="text-white" />
+                Editar
+              </button>
+              <button
+                onClick={() => setDeleteId(vehicle.id)}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-semibold active:scale-95 transition-all hover:bg-red-100"
+              >
+                <Icon name="TrashIcon" size={16} className="text-red-500" />
+              </button>
+            </div>
           </div>
         ))}
       </div>
 
-      {canEdit && showForm && (
+      {showForm && (
         <VehicleProductionForm vehicleId={editingId} onClose={handleFormClose} />
       )}
 

@@ -5,7 +5,7 @@ import Dexie, { type Table } from 'dexie';
 export interface DBProfile {
   id: string;
   email: string;
-  role: 'admin' | 'inspector' | 'comercial';
+  role: 'admin' | 'inspector';
   full_name: string;
   is_active: boolean;
   must_reset_password: boolean;
@@ -29,7 +29,7 @@ export interface DBVehicle {
   updated_at: string;
   local_id?: string;
   _synced_at?: number;
-  _dirty?: boolean;
+  _dirty?: boolean; // true = has local changes not yet synced
 }
 
 export interface DBMaterial {
@@ -65,10 +65,32 @@ export interface DBInspection {
   is_locked?: boolean;
   finalized_at?: string;
   finalized_by?: string;
+  unlocked_at?: string;
+  unlocked_by?: string;
+  approved_at?: string;
+  approved_by?: string;
+  rejected_at?: string;
+  rejected_by?: string;
+  rejection_reason?: string;
+  unlock_reason?: string;
+  finalized_snapshot?: Record<string, unknown>;
   finalization_timestamp?: string;
   creation_timestamp?: string;
   local_id?: string;
-  sync_status?: 'pending' | 'synced' | 'failed';
+  sync_status?: 'pending' | 'synced' | 'failed' | 'conflict';
+  // Concurrencia optimista: version incrementada por trigger en Supabase en cada UPDATE.
+  version: number;
+  // Última version remota conocida al momento del último sync exitoso.
+  // Se compara contra la version actual del servidor antes de un UPDATE
+  // para detectar si alguien más modificó el registro mientras estábamos offline.
+  base_version?: number;
+  // Presente solo si sync_status === 'conflict'. Guarda ambas versiones
+  // para que la UI decida (o para auto-merge si los campos no chocan).
+  _conflict?: {
+    remote: Partial<DBInspection>;
+    local: Partial<DBInspection>;
+    detected_at: string;
+  };
   created_at: string;
   updated_at: string;
   _synced_at?: number;
@@ -76,9 +98,14 @@ export interface DBInspection {
 }
 
 export interface DBSyncQueueItem {
-  id?: number;
+  id?: number; // auto-increment
   table_name: string;
-  operation: 'INSERT' | 'UPDATE' | 'DELETE';
+  // 'RPC' se usa para transiciones de estado encoladas mientras se está offline
+  // (submit_for_review, approve_inspection, etc). Para estos items, payload
+  // tiene la forma { rpc_name: string, rpc_args: Record<string, unknown> } y
+  // syncService.ts debe llamar supabase.rpc(payload.rpc_name, payload.rpc_args)
+  // en vez de hacer upsert.
+  operation: 'INSERT' | 'UPDATE' | 'DELETE' | 'RPC';
   payload: Record<string, unknown>;
   record_id: string;
   created_at: number;
@@ -87,88 +114,21 @@ export interface DBSyncQueueItem {
   status: 'pending' | 'processing' | 'failed' | 'done';
 }
 
+export interface DBErrorLog {
+  id: string;
+  level: 'error' | 'warn' | 'info';
+  message: string;
+  stack?: string | null;
+  context?: string | null;
+  user_id?: string | null;
+  user_email?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at: string;
+}
+
 export interface DBSyncMeta {
-  id: string;
-  last_sync: number;
-}
-
-// ─── Production Orders Interfaces ─────────────────────────────────────────────
-
-export interface DBProductionOrderItem {
-  id: string;
-  order_id: string;
-  linea: number;
-  pieza_id: string;
-  pieza_nombre: string;
-  codigo: string;
-  cantidad: number;
-  nivel_nij_id: string;
-  nivel_nij_nombre: string;
-  lleva_marcacion: boolean;
-  tipo_marcacion_id?: string;
-  tipo_marcacion_nombre?: string;
-  observaciones?: string;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface DBProductionOrder {
-  id: string;
-  numero_orden?: string;
-  fecha: string;
-  cliente_id: string;
-  cliente_nombre: string;
-  pais: string;
-  modelo_id: string;
-  modelo_nombre: string;
-  nivel_nij_id: string;
-  nivel_nij_nombre: string;
-  forma_pago_id: string;
-  forma_pago_nombre: string;
-  incoterm_id: string;
-  incoterm_nombre: string;
-  cantidad_vehiculos: number;
-  observaciones?: string;
-  status: string;
-  total_piezas: number;
-  rejection_reason?: string;
-  submitted_at?: string;
-  submitted_by?: string;
-  approved_at?: string;
-  approved_by?: string;
-  rejected_at?: string;
-  rejected_by?: string;
-  cancelled_at?: string;
-  cancelled_by?: string;
-  version: number;
-  created_by?: string;
-  created_by_name?: string;
-  created_at: string;
-  updated_at: string;
-  items?: DBProductionOrderItem[];
-  _synced_at?: number;
-  _dirty?: boolean;
-}
-
-// ─── Catalog Interfaces ───────────────────────────────────────────────────────
-
-export interface DBPOCatalogItem {
-  id: string;
-  nombre: string;
-  activo: boolean;
-  orden?: number;
-  created_at: string;
-  updated_at: string;
-  _synced_at?: number;
-}
-
-export interface DBPOCliente extends DBPOCatalogItem {
-  pais?: string;
-}
-
-export interface DBPOPiezaVidrio extends DBPOCatalogItem {
-  codigo: string;
-  abreviatura: string;
+  id: string; // table name
+  last_sync: number; // unix timestamp ms
 }
 
 // ─── Dexie Database ───────────────────────────────────────────────────────────
@@ -180,14 +140,7 @@ class GVDatabase extends Dexie {
   inspections!: Table<DBInspection, string>;
   sync_queue!: Table<DBSyncQueueItem, number>;
   sync_meta!: Table<DBSyncMeta, string>;
-  production_orders!: Table<DBProductionOrder, string>;
-  po_clientes!: Table<DBPOCliente, string>;
-  po_modelos_vehiculo!: Table<DBPOCatalogItem, string>;
-  po_niveles_nij!: Table<DBPOCatalogItem, string>;
-  po_formas_pago!: Table<DBPOCatalogItem, string>;
-  po_incoterms!: Table<DBPOCatalogItem, string>;
-  po_piezas_vidrio!: Table<DBPOPiezaVidrio, string>;
-  po_tipos_marcacion!: Table<DBPOCatalogItem, string>;
+  error_logs!: Table<DBErrorLog, string>;
 
   constructor() {
     super('gv_enterprise_db');
@@ -201,7 +154,6 @@ class GVDatabase extends Dexie {
       sync_meta: 'id',
     });
 
-    // Version 2 and 3 — keep unchanged (no-op upgrades preserve data)
     this.version(2).stores({
       profiles: 'id, email, role, is_active, updated_at',
       vehicles: 'id, placa, marca, propietario, created_by, updated_at, _dirty',
@@ -209,34 +161,30 @@ class GVDatabase extends Dexie {
       inspections: 'id, placa, inspector_id, status, updated_at, local_id, _dirty',
       sync_queue: '++id, table_name, operation, record_id, status, created_at',
       sync_meta: 'id',
+      error_logs: 'id, level, created_at, context',
     });
 
-    this.version(3).stores({
-      profiles: 'id, email, role, is_active, updated_at',
-      vehicles: 'id, placa, marca, propietario, created_by, updated_at, _dirty',
-      materials: 'id, nombre, categoria, updated_at, _dirty',
-      inspections: 'id, placa, inspector_id, status, updated_at, local_id, _dirty',
-      sync_queue: '++id, table_name, operation, record_id, status, created_at',
-      sync_meta: 'id',
-    });
-
-    // Version 4 — adds production orders and catalog tables
-    this.version(4).stores({
-      profiles: 'id, email, role, is_active, updated_at',
-      vehicles: 'id, placa, marca, propietario, created_by, updated_at, _dirty',
-      materials: 'id, nombre, categoria, updated_at, _dirty',
-      inspections: 'id, placa, inspector_id, status, updated_at, local_id, _dirty',
-      sync_queue: '++id, table_name, operation, record_id, status, created_at',
-      sync_meta: 'id',
-      production_orders: 'id, numero_orden, status, cliente_id, modelo_id, created_by, updated_at, _dirty',
-      po_clientes: 'id, nombre, activo, updated_at',
-      po_modelos_vehiculo: 'id, nombre, activo, updated_at',
-      po_niveles_nij: 'id, nombre, activo, updated_at',
-      po_formas_pago: 'id, nombre, activo, updated_at',
-      po_incoterms: 'id, nombre, activo, updated_at',
-      po_piezas_vidrio: 'id, nombre, codigo, activo, updated_at',
-      po_tipos_marcacion: 'id, nombre, activo, updated_at',
-    });
+    // v3: soporte de concurrencia optimista (version) y estado de conflicto
+    this.version(3)
+      .stores({
+        profiles: 'id, email, role, is_active, updated_at',
+        vehicles: 'id, placa, marca, propietario, created_by, updated_at, _dirty',
+        materials: 'id, nombre, categoria, updated_at, _dirty',
+        inspections: 'id, placa, inspector_id, status, updated_at, local_id, _dirty, sync_status',
+        sync_queue: '++id, table_name, operation, record_id, status, created_at',
+        sync_meta: 'id',
+        error_logs: 'id, level, created_at, context',
+      })
+      .upgrade(async (tx) => {
+        // Registros existentes no tienen version todavía: asumimos 1 (recién sincronizados)
+        await tx
+          .table('inspections')
+          .toCollection()
+          .modify((insp: DBInspection) => {
+            if (insp.version === undefined) insp.version = 1;
+            if (insp.base_version === undefined) insp.base_version = insp.version;
+          });
+      });
   }
 }
 
