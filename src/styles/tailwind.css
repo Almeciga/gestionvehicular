@@ -1,0 +1,123 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap');
+
+@layer base {
+  :root {
+    --primary: 210 65% 28%;
+    --primary-foreground: 0 0% 100%;
+    --accent: 145 63% 42%;
+    --warning: 37 90% 51%;
+    --danger: 4 86% 57%;
+    --background: 210 20% 97%;
+    --card: 0 0% 100%;
+    --border: 214 20% 88%;
+    --muted: 214 15% 55%;
+    --muted-bg: 214 20% 95%;
+    --text-primary: 214 30% 12%;
+    --text-secondary: 214 20% 40%;
+  }
+
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--text-primary));
+    font-family: 'DM Sans', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-[#1B4F72] text-white font-semibold rounded-xl px-6 py-3 text-base active:scale-95 transition-all duration-150 hover:bg-[#154060] disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-[#1B4F72] font-semibold rounded-xl px-6 py-3 text-base border-2 border-[#1B4F72] active:scale-95 transition-all duration-150 hover:bg-blue-50 disabled:opacity-50;
+  }
+
+  .btn-danger {
+    @apply bg-[#E74C3C] text-white font-semibold rounded-xl px-6 py-3 text-base active:scale-95 transition-all duration-150 hover:bg-[#C0392B] disabled:opacity-50;
+  }
+
+  .card {
+    @apply bg-white rounded-2xl shadow-sm border border-gray-100;
+  }
+
+  .section-header {
+    @apply flex items-center justify-between p-4 cursor-pointer select-none;
+  }
+
+  .form-label {
+    @apply block text-sm font-600 text-gray-700 mb-1;
+  }
+
+  .form-input {
+    @apply w-full border border-gray-200 rounded-xl px-4 py-3 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1B4F72] focus:border-transparent transition-all bg-white;
+  }
+
+  .form-select {
+    @apply w-full border border-gray-200 rounded-xl px-4 py-3 text-base text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#1B4F72] focus:border-transparent bg-white appearance-none;
+  }
+
+  .status-bueno {
+    @apply bg-green-100 text-green-700 border border-green-200;
+  }
+
+  .status-regular {
+    @apply bg-yellow-100 text-yellow-700 border border-yellow-200;
+  }
+
+  .status-malo {
+    @apply bg-red-100 text-red-700 border border-red-200;
+  }
+
+  .tab-active {
+    @apply bg-[#1B4F72] text-white;
+  }
+
+  .tab-inactive {
+    @apply bg-gray-100 text-gray-600;
+  }
+
+  .checklist-item {
+    @apply border border-gray-100 rounded-xl p-4 bg-gray-50;
+  }
+
+  .photo-thumb {
+    @apply w-16 h-16 rounded-lg object-cover border border-gray-200;
+  }
+}
+
+@layer utilities {
+  .font-600 {
+    font-weight: 600;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .signature-canvas {
+    touch-action: none;
+  }
+}

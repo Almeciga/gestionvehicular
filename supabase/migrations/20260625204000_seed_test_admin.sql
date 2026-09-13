@@ -1,0 +1,25 @@
+-- ============================================================
+-- Seed test admin user: testadmin@gestionveh.com / Admin1234!
+-- ============================================================
+-- NOTE: Direct insertion into auth.users using crypt() is NOT recommended
+-- for current Supabase / GoTrue versions because Supabase manages the
+-- password hash format internally.
+--
+-- The test admin is now created via the API endpoint:
+--   POST /api/admin/seed-admin
+--
+-- That endpoint uses supabase.auth.admin.createUser() which is the
+-- officially supported method for programmatic user creation.
+--
+-- To seed the test admin, call the endpoint once in your dev environment:
+--   curl -X POST http://localhost:3000/api/admin/seed-admin
+--
+-- Credentials:
+--   email:    testadmin@gestionveh.com
+--   password: Admin1234!
+--   role:     admin
+-- ============================================================
+
+-- This migration intentionally contains no SQL statements.
+-- All test admin seeding is handled by the API route.
+SELECT 1; -- no-op to satisfy migration runner
