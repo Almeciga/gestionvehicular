@@ -32,7 +32,11 @@ export async function queueInspectionMedia(
       return;
     }
     if (value && typeof value === 'object') {
-      await Promise.all(Object.entries(value).map(([key, item]) => visit(item, fieldPath ? `${fieldPath}.${key}` : key)));
+      await Promise.all(
+        Object.entries(value).map(([key, item]) =>
+          visit(item, fieldPath ? `${fieldPath}.${key}` : key)
+        )
+      );
     }
   };
 
