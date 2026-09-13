@@ -300,12 +300,50 @@ async function processSyncItem(
           .from(table_name)
           .upsert({ ...cleanPayload, id: record_id }, { onConflict: 'id' });
       if (error) return { success: false, error: error.message };
+
+      // For production_orders: read back server-assigned numero_orden and status
+      if (table_name === 'production_orders') {
+        const { data: serverRow } = await supabase
+            .from('production_orders')
+            .select('id, numero_orden, status, updated_at')
+            .eq('id', record_id)
+            .single();
+        if (serverRow) {
+          const db = getDB();
+          await db.table('production_orders').update(record_id, {
+            numero_orden: serverRow.numero_orden,
+            status: serverRow.status,
+            updated_at: serverRow.updated_at,
+            _dirty: false,
+            _synced_at: Date.now(),
+          });
+        }
+      }
     } else if (operation === 'UPDATE') {
       const { error } = await supabase
           .from(table_name)
           .update({ ...cleanPayload, updated_at: new Date().toISOString() })
           .eq('id', record_id);
       if (error) return { success: false, error: error.message };
+
+      // For production_orders: read back server-authoritative status and numero_orden
+      if (table_name === 'production_orders') {
+        const { data: serverRow } = await supabase
+            .from('production_orders')
+            .select('id, numero_orden, status, updated_at')
+            .eq('id', record_id)
+            .single();
+        if (serverRow) {
+          const db = getDB();
+          await db.table('production_orders').update(record_id, {
+            numero_orden: serverRow.numero_orden,
+            status: serverRow.status,
+            updated_at: serverRow.updated_at,
+            _dirty: false,
+            _synced_at: Date.now(),
+          });
+        }
+      }
     } else if (operation === 'DELETE') {
       const { error } = await supabase
           .from(table_name)

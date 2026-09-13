@@ -116,7 +116,11 @@ export async function middleware(request: NextRequest) {
 
     if (!isActive) {
       console.warn('[middleware] User is inactive — signing out:', user.id);
-      await supabase.auth.signOut();
+      try {
+        await supabase.auth.signOut();
+      } catch (signOutError) {
+        console.error('[middleware] signOut failed (continuing redirect):', signOutError);
+      }
       const url = request.nextUrl.clone();
       url.pathname = '/login';
       return NextResponse.redirect(url);
