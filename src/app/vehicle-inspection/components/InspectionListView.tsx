@@ -3,9 +3,11 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Icon from '@/components/ui/AppIcon';
 import StatusBadge from '@/components/ui/StatusBadge';
 import SyncStatusBadge from '@/components/ui/SyncStatusBadge';
+import InspectionFormModal from './InspectionFormModal';
 import PdfGenerationModal from './PdfGenerationModal';
 import { toast } from 'sonner';
 import { InspectionsRepo } from '@/lib/repositories';
+import { migrateLegacyInspections } from '@/lib/inspectionMigration';
 import { toInspectionView, type InspectionView } from '@/lib/inspectionView';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetworkSync } from '@/hooks/useNetworkSync';
@@ -75,10 +77,10 @@ async function downloadServerPdf(localId: string, placa: string): Promise<{ succ
     // New offline-first records use their UUID directly as id; legacy records
     // may only be linked through local_id. Support both safely.
     const { data: rowById, error: idError } = await supabase
-        .from('inspections')
-        .select('id')
-        .eq('id', localId)
-        .maybeSingle();
+      .from('inspections')
+      .select('id')
+      .eq('id', localId)
+      .maybeSingle();
     const { data: rowByLocalId, error: localIdError } = rowById
       ? { data: null, error: null }
       : await supabase.from('inspections').select('id').eq('local_id', localId).maybeSingle();
@@ -116,10 +118,10 @@ async function downloadServerPdf(localId: string, placa: string): Promise<{ succ
 // ─── Save PDF export record to Supabase ──────────────────────────────────────
 
 async function savePdfExportRecord(
-    insp: InspectionView,
-    generatedBy: string,
-    generatedByName: string,
-    isRegeneration: boolean
+  insp: InspectionView,
+  generatedBy: string,
+  generatedByName: string,
+  isRegeneration: boolean
 ): Promise<void> {
   try {
     const supabase = createClient();
@@ -161,37 +163,37 @@ async function savePdfExportRecord(
 function UnlockDialog({ placa, onConfirm, onCancel }: { placa: string; onConfirm: (reason: string) => void; onCancel: () => void }) {
   const [reason, setReason] = useState('');
   return (
-      <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
-              <Icon name="LockOpenIcon" size={20} className="text-amber-600" />
-            </div>
-            <div>
-              <h3 className="font-bold text-gray-800">Desbloquear Inspección</h3>
-              <p className="text-xs text-gray-500">{placa}</p>
-            </div>
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+            <Icon name="LockOpenIcon" size={20} className="text-amber-600" />
           </div>
-          <p className="text-sm text-gray-600 mb-3">Esta acción quedará registrada en el historial de auditoría. Ingrese el motivo del desbloqueo:</p>
-          <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Ej: Corrección de datos del propietario solicitada por gerencia..."
-              className="w-full border border-gray-200 rounded-xl p-3 text-sm resize-none h-24 focus:outline-none focus:ring-2 focus:ring-amber-400"
-          />
-          <p className="text-xs text-gray-400 mt-1 mb-4">Mínimo 5 caracteres requeridos</p>
-          <div className="flex gap-2">
-            <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-semibold text-sm">Cancelar</button>
-            <button
-                onClick={() => reason.trim().length >= 5 && onConfirm(reason.trim())}
-                disabled={reason.trim().length < 5}
-                className="flex-1 py-2.5 rounded-xl bg-amber-500 text-white font-semibold text-sm disabled:opacity-40"
-            >
-              Desbloquear
-            </button>
+          <div>
+            <h3 className="font-bold text-gray-800">Desbloquear Inspección</h3>
+            <p className="text-xs text-gray-500">{placa}</p>
           </div>
         </div>
+        <p className="text-sm text-gray-600 mb-3">Esta acción quedará registrada en el historial de auditoría. Ingrese el motivo del desbloqueo:</p>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Ej: Corrección de datos del propietario solicitada por gerencia..."
+          className="w-full border border-gray-200 rounded-xl p-3 text-sm resize-none h-24 focus:outline-none focus:ring-2 focus:ring-amber-400"
+        />
+        <p className="text-xs text-gray-400 mt-1 mb-4">Mínimo 5 caracteres requeridos</p>
+        <div className="flex gap-2">
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-semibold text-sm">Cancelar</button>
+          <button
+            onClick={() => reason.trim().length >= 5 && onConfirm(reason.trim())}
+            disabled={reason.trim().length < 5}
+            className="flex-1 py-2.5 rounded-xl bg-amber-500 text-white font-semibold text-sm disabled:opacity-40"
+          >
+            Desbloquear
+          </button>
+        </div>
       </div>
+    </div>
   );
 }
 
@@ -200,35 +202,35 @@ function UnlockDialog({ placa, onConfirm, onCancel }: { placa: string; onConfirm
 function RejectDialog({ placa, onConfirm, onCancel }: { placa: string; onConfirm: (reason: string) => void; onCancel: () => void }) {
   const [reason, setReason] = useState('');
   return (
-      <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-              <Icon name="XCircleIcon" size={20} className="text-red-600" />
-            </div>
-            <div>
-              <h3 className="font-bold text-gray-800">Rechazar Inspección</h3>
-              <p className="text-xs text-gray-500">{placa}</p>
-            </div>
+    <div className="fixed inset-0 z-[60] bg-black/50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+            <Icon name="XCircleIcon" size={20} className="text-red-600" />
           </div>
-          <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              placeholder="Motivo del rechazo..."
-              className="w-full border border-gray-200 rounded-xl p-3 text-sm resize-none h-24 focus:outline-none focus:ring-2 focus:ring-red-400"
-          />
-          <div className="flex gap-2 mt-4">
-            <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-semibold text-sm">Cancelar</button>
-            <button
-                onClick={() => reason.trim().length >= 5 && onConfirm(reason.trim())}
-                disabled={reason.trim().length < 5}
-                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-semibold text-sm disabled:opacity-40"
-            >
-              Rechazar
-            </button>
+          <div>
+            <h3 className="font-bold text-gray-800">Rechazar Inspección</h3>
+            <p className="text-xs text-gray-500">{placa}</p>
           </div>
         </div>
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Motivo del rechazo..."
+          className="w-full border border-gray-200 rounded-xl p-3 text-sm resize-none h-24 focus:outline-none focus:ring-2 focus:ring-red-400"
+        />
+        <div className="flex gap-2 mt-4">
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 font-semibold text-sm">Cancelar</button>
+          <button
+            onClick={() => reason.trim().length >= 5 && onConfirm(reason.trim())}
+            disabled={reason.trim().length < 5}
+            className="flex-1 py-2.5 rounded-xl bg-red-500 text-white font-semibold text-sm disabled:opacity-40"
+          >
+            Rechazar
+          </button>
+        </div>
       </div>
+    </div>
   );
 }
 
@@ -240,106 +242,106 @@ function AdminDashboard({ inspections, onClose }: { inspections: InspectionView[
   const failed = inspections.filter((i) => i.syncStatus === 'failed');
 
   return (
-      <div className="fixed inset-0 z-[55] bg-black/50 flex items-end sm:items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto">
-          <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
-            <h3 className="font-bold text-gray-800 flex items-center gap-2">
-              <Icon name="ChartBarIcon" size={18} className="text-[#1B4F72]" />
-              Panel de Administración
-            </h3>
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100">
-              <Icon name="XMarkIcon" size={18} className="text-gray-500" />
-            </button>
+    <div className="fixed inset-0 z-[55] bg-black/50 flex items-end sm:items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto">
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+          <h3 className="font-bold text-gray-800 flex items-center gap-2">
+            <Icon name="ChartBarIcon" size={18} className="text-[#1B4F72]" />
+            Panel de Administración
+          </h3>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100">
+            <Icon name="XMarkIcon" size={18} className="text-gray-500" />
+          </button>
+        </div>
+        <div className="p-5 space-y-4">
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-orange-50 rounded-xl p-3 text-center border border-orange-100">
+              <p className="text-2xl font-bold text-orange-600">{pending.length}</p>
+              <p className="text-xs text-orange-700 font-semibold mt-0.5">En Revisión</p>
+            </div>
+            <div className="bg-red-50 rounded-xl p-3 text-center border border-red-100">
+              <p className="text-2xl font-bold text-red-600">{rejected.length}</p>
+              <p className="text-xs text-red-700 font-semibold mt-0.5">Rechazadas</p>
+            </div>
+            <div className="bg-yellow-50 rounded-xl p-3 text-center border border-yellow-100">
+              <p className="text-2xl font-bold text-yellow-600">{failed.length}</p>
+              <p className="text-xs text-yellow-700 font-semibold mt-0.5">Sync Fallido</p>
+            </div>
           </div>
-          <div className="p-5 space-y-4">
-            {/* Stats */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-orange-50 rounded-xl p-3 text-center border border-orange-100">
-                <p className="text-2xl font-bold text-orange-600">{pending.length}</p>
-                <p className="text-xs text-orange-700 font-semibold mt-0.5">En Revisión</p>
-              </div>
-              <div className="bg-red-50 rounded-xl p-3 text-center border border-red-100">
-                <p className="text-2xl font-bold text-red-600">{rejected.length}</p>
-                <p className="text-xs text-red-700 font-semibold mt-0.5">Rechazadas</p>
-              </div>
-              <div className="bg-yellow-50 rounded-xl p-3 text-center border border-yellow-100">
-                <p className="text-2xl font-bold text-yellow-600">{failed.length}</p>
-                <p className="text-xs text-yellow-700 font-semibold mt-0.5">Sync Fallido</p>
+
+          {/* Pending Review */}
+          {pending.length > 0 && (
+            <div>
+              <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5">
+                <Icon name="ClockIcon" size={14} className="text-orange-500" />
+                Pendientes de Revisión
+              </h4>
+              <div className="space-y-2">
+                {pending.map((insp) => (
+                  <div key={insp.id} className="flex items-center justify-between bg-orange-50 rounded-xl p-3 border border-orange-100">
+                    <div>
+                      <p className="text-sm font-bold text-gray-800">{insp.enterpriseId || insp.placa}</p>
+                      <p className="text-xs text-gray-500">{insp.propietario} — {insp.inspectorName}</p>
+                    </div>
+                    <StatusBadge status={insp.status} />
+                  </div>
+                ))}
               </div>
             </div>
+          )}
 
-            {/* Pending Review */}
-            {pending.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5">
-                    <Icon name="ClockIcon" size={14} className="text-orange-500" />
-                    Pendientes de Revisión
-                  </h4>
-                  <div className="space-y-2">
-                    {pending.map((insp) => (
-                        <div key={insp.id} className="flex items-center justify-between bg-orange-50 rounded-xl p-3 border border-orange-100">
-                          <div>
-                            <p className="text-sm font-bold text-gray-800">{insp.enterpriseId || insp.placa}</p>
-                            <p className="text-xs text-gray-500">{insp.propietario} — {insp.inspectorName}</p>
-                          </div>
-                          <StatusBadge status={insp.status} />
-                        </div>
-                    ))}
+          {/* Rejected */}
+          {rejected.length > 0 && (
+            <div>
+              <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5">
+                <Icon name="XCircleIcon" size={14} className="text-red-500" />
+                Rechazadas
+              </h4>
+              <div className="space-y-2">
+                {rejected.map((insp) => (
+                  <div key={insp.id} className="bg-red-50 rounded-xl p-3 border border-red-100">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-bold text-gray-800">{insp.enterpriseId || insp.placa}</p>
+                      <StatusBadge status={insp.status} />
+                    </div>
+                    {insp.rejectionReason && (
+                      <p className="text-xs text-red-600 mt-1">Razón: {insp.rejectionReason}</p>
+                    )}
                   </div>
-                </div>
-            )}
+                ))}
+              </div>
+            </div>
+          )}
 
-            {/* Rejected */}
-            {rejected.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5">
-                    <Icon name="XCircleIcon" size={14} className="text-red-500" />
-                    Rechazadas
-                  </h4>
-                  <div className="space-y-2">
-                    {rejected.map((insp) => (
-                        <div key={insp.id} className="bg-red-50 rounded-xl p-3 border border-red-100">
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-bold text-gray-800">{insp.enterpriseId || insp.placa}</p>
-                            <StatusBadge status={insp.status} />
-                          </div>
-                          {insp.rejectionReason && (
-                              <p className="text-xs text-red-600 mt-1">Razón: {insp.rejectionReason}</p>
-                          )}
-                        </div>
-                    ))}
+          {/* Sync Failures */}
+          {failed.length > 0 && (
+            <div>
+              <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5">
+                <Icon name="ExclamationTriangleIcon" size={14} className="text-yellow-500" />
+                Fallos de Sincronización
+              </h4>
+              <div className="space-y-2">
+                {failed.map((insp) => (
+                  <div key={insp.id} className="bg-yellow-50 rounded-xl p-3 border border-yellow-100">
+                    <p className="text-sm font-bold text-gray-800">{insp.enterpriseId || insp.placa}</p>
+                    <p className="text-xs text-gray-500">{insp.propietario}</p>
                   </div>
-                </div>
-            )}
+                ))}
+              </div>
+            </div>
+          )}
 
-            {/* Sync Failures */}
-            {failed.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-1.5">
-                    <Icon name="ExclamationTriangleIcon" size={14} className="text-yellow-500" />
-                    Fallos de Sincronización
-                  </h4>
-                  <div className="space-y-2">
-                    {failed.map((insp) => (
-                        <div key={insp.id} className="bg-yellow-50 rounded-xl p-3 border border-yellow-100">
-                          <p className="text-sm font-bold text-gray-800">{insp.enterpriseId || insp.placa}</p>
-                          <p className="text-xs text-gray-500">{insp.propietario}</p>
-                        </div>
-                    ))}
-                  </div>
-                </div>
-            )}
-
-            {pending.length === 0 && rejected.length === 0 && failed.length === 0 && (
-                <div className="text-center py-8">
-                  <Icon name="CheckCircleIcon" size={40} className="text-green-400 mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-gray-500">Todo en orden</p>
-                  <p className="text-xs text-gray-400">No hay elementos que requieran atención</p>
-                </div>
-            )}
-          </div>
+          {pending.length === 0 && rejected.length === 0 && failed.length === 0 && (
+            <div className="text-center py-8">
+              <Icon name="CheckCircleIcon" size={40} className="text-green-400 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-gray-500">Todo en orden</p>
+              <p className="text-xs text-gray-400">No hay elementos que requieran atención</p>
+            </div>
+          )}
         </div>
       </div>
+    </div>
   );
 }
 
@@ -352,6 +354,8 @@ export default function InspectionListView() {
   const { isOnline, pendingCount, pendingMediaCount, isSyncing, syncStatus, runSync } = useNetworkSync();
   const [inspections, setInspections] = useState<InspectionView[]>([]);
   const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<FilterStatus>('all');
   const [showAuditId, setShowAuditId] = useState<string | null>(null);
   const [pdfProgress, setPdfProgress] = useState<PDFGenerationProgress | null>(null);
@@ -363,6 +367,7 @@ export default function InspectionListView() {
   const [serverPdfLoadingId, setServerPdfLoadingId] = useState<string | null>(null);
 
   const loadInspections = useCallback(async () => {
+    await migrateLegacyInspections();
     const views = (await InspectionsRepo.getAll()).map(toInspectionView);
     // The audit history remains in Supabase and is written by database
     // triggers/RPCs. It is intentionally not fetched here: the deployed
@@ -376,6 +381,12 @@ export default function InspectionListView() {
     window.addEventListener('gv-sync-complete', loadInspections);
     return () => window.removeEventListener('gv-sync-complete', loadInspections);
   }, [loadInspections]);
+
+  const handleFormClose = () => {
+    setShowForm(false);
+    setEditingId(null);
+    loadInspections();
+  };
 
   const handleDelete = async (id: string, placa: string) => {
     if (!confirm(`¿Eliminar inspección de ${placa}? Esta acción no se puede deshacer.`)) return;
@@ -562,360 +573,375 @@ export default function InspectionListView() {
   const rejectTarget = rejectDialogId ? inspections.find((i) => i.id === rejectDialogId) : null;
 
   return (
-      <div className="px-4 py-4 max-w-screen-2xl mx-auto">
-        {/* Dialogs */}
-        {unlockTarget && (
-            <UnlockDialog
-                placa={unlockTarget.placa}
-                onConfirm={(reason) => confirmUnlock(unlockTarget.id, reason)}
-                onCancel={() => setUnlockDialogId(null)}
-            />
-        )}
-        {rejectTarget && (
-            <RejectDialog
-                placa={rejectTarget.placa}
-                onConfirm={(reason) => confirmReject(rejectTarget.id, reason)}
-                onCancel={() => setRejectDialogId(null)}
-            />
-        )}
-        {showAdminDashboard && (
-            <AdminDashboard inspections={inspections} onClose={() => setShowAdminDashboard(false)} />
-        )}
+    <div className="px-4 py-4 max-w-screen-2xl mx-auto">
+      {/* Dialogs */}
+      {unlockTarget && (
+        <UnlockDialog
+          placa={unlockTarget.placa}
+          onConfirm={(reason) => confirmUnlock(unlockTarget.id, reason)}
+          onCancel={() => setUnlockDialogId(null)}
+        />
+      )}
+      {rejectTarget && (
+        <RejectDialog
+          placa={rejectTarget.placa}
+          onConfirm={(reason) => confirmReject(rejectTarget.id, reason)}
+          onCancel={() => setRejectDialogId(null)}
+        />
+      )}
+      {showAdminDashboard && (
+        <AdminDashboard inspections={inspections} onClose={() => setShowAdminDashboard(false)} />
+      )}
 
-        {/* PDF Generation Modal */}
-        {pdfProgress && (
-            <PdfGenerationModal
-                progress={pdfProgress}
-                onRetry={handlePdfRetry}
-                onClose={() => { setPdfProgress(null); setPendingPdfInsp(null); }}
-            />
-        )}
+      {/* PDF Generation Modal */}
+      {pdfProgress && (
+        <PdfGenerationModal
+          progress={pdfProgress}
+          onRetry={handlePdfRetry}
+          onClose={() => { setPdfProgress(null); setPendingPdfInsp(null); }}
+        />
+      )}
 
-        {/* Network + Sync Status Bar */}
-        <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
-            <SyncStatusBadge
-                status={syncStatus}
-                pendingCount={pendingCount + pendingMediaCount}
-            />
-            {!isOnline && (
-                <span className="text-xs text-gray-500">Modo offline — datos guardados localmente</span>
-            )}
-            {isOnline && (pendingCount > 0 || pendingMediaCount > 0) && (
-                <button
-                    onClick={runSync}
-                    disabled={isSyncing}
-                    className="text-xs text-[#1B4F72] font-semibold hover:underline disabled:opacity-50"
-                >
-                  Sincronizar ahora
-                </button>
-            )}
-          </div>
-          {isAdmin && (
-              <button
-                  onClick={() => setShowAdminDashboard(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1B4F72]/10 text-[#1B4F72] text-xs font-bold hover:bg-[#1B4F72]/20 transition-colors"
-              >
-                <Icon name="ChartBarIcon" size={14} className="text-[#1B4F72]" />
-                Admin
-                {stats.revision > 0 && (
-                    <span className="bg-orange-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{stats.revision}</span>
-                )}
-              </button>
+      {/* Network + Sync Status Bar */}
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <SyncStatusBadge
+            status={syncStatus}
+            pendingCount={pendingCount + pendingMediaCount}
+          />
+          {!isOnline && (
+            <span className="text-xs text-gray-500">Modo offline — datos guardados localmente</span>
+          )}
+          {isOnline && (pendingCount > 0 || pendingMediaCount > 0) && (
+            <button
+              onClick={runSync}
+              disabled={isSyncing}
+              className="text-xs text-[#1B4F72] font-semibold hover:underline disabled:opacity-50"
+            >
+              Sincronizar ahora
+            </button>
           )}
         </div>
+        {isAdmin && (
+          <button
+            onClick={() => setShowAdminDashboard(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#1B4F72]/10 text-[#1B4F72] text-xs font-bold hover:bg-[#1B4F72]/20 transition-colors"
+          >
+            <Icon name="ChartBarIcon" size={14} className="text-[#1B4F72]" />
+            Admin
+            {stats.revision > 0 && (
+              <span className="bg-orange-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px] font-bold">{stats.revision}</span>
+            )}
+          </button>
+        )}
+      </div>
 
-        {/* Stats Row */}
-        <UsersSelectPanel />
-        <div className="grid grid-cols-4 gap-2 mb-5">
-          <div className="card p-3 text-center">
-            <p className="text-2xl font-bold text-[#1B4F72] tabular-nums">{stats.hoy}</p>
-            <p className="text-xs text-gray-500 font-semibold mt-0.5">Hoy</p>
-          </div>
-          <div className="card p-3 text-center">
-            <p className="text-2xl font-bold text-green-600 tabular-nums">{stats.completadas}</p>
-            <p className="text-xs text-gray-500 font-semibold mt-0.5">Finalizadas</p>
-          </div>
-          <div className="card p-3 text-center">
-            <p className="text-2xl font-bold text-yellow-600 tabular-nums">{stats.enProceso}</p>
-            <p className="text-xs text-gray-500 font-semibold mt-0.5">En Proceso</p>
-          </div>
-          <div className="card p-3 text-center">
-            <p className="text-2xl font-bold text-orange-600 tabular-nums">{stats.revision}</p>
-            <p className="text-xs text-gray-500 font-semibold mt-0.5">Revisión</p>
-          </div>
+      {/* Stats Row */}
+      <UsersSelectPanel />
+      <div className="grid grid-cols-4 gap-2 mb-5">
+        <div className="card p-3 text-center">
+          <p className="text-2xl font-bold text-[#1B4F72] tabular-nums">{stats.hoy}</p>
+          <p className="text-xs text-gray-500 font-semibold mt-0.5">Hoy</p>
         </div>
+        <div className="card p-3 text-center">
+          <p className="text-2xl font-bold text-green-600 tabular-nums">{stats.completadas}</p>
+          <p className="text-xs text-gray-500 font-semibold mt-0.5">Finalizadas</p>
+        </div>
+        <div className="card p-3 text-center">
+          <p className="text-2xl font-bold text-yellow-600 tabular-nums">{stats.enProceso}</p>
+          <p className="text-xs text-gray-500 font-semibold mt-0.5">En Proceso</p>
+        </div>
+        <div className="card p-3 text-center">
+          <p className="text-2xl font-bold text-orange-600 tabular-nums">{stats.revision}</p>
+          <p className="text-xs text-gray-500 font-semibold mt-0.5">Revisión</p>
+        </div>
+      </div>
 
-        {/* Search + New */}
-        <div className="flex gap-3 mb-3">
-          <div className="flex-1 relative">
-            <Icon name="MagnifyingGlassIcon" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-                type="text"
-                placeholder="Buscar por placa, VIN, propietario, ID, inspector..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1B4F72]"
-            />
-            {search && (
-                <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  <Icon name="XMarkIcon" size={16} className="text-gray-400" />
-                </button>
+      {/* Search + New */}
+      <div className="flex gap-3 mb-3">
+        <div className="flex-1 relative">
+          <Icon name="MagnifyingGlassIcon" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Buscar por placa, VIN, propietario, ID, inspector..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1B4F72]"
+          />
+          {search && (
+            <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+              <Icon name="XMarkIcon" size={16} className="text-gray-400" />
+            </button>
+          )}
+        </div>
+        <button
+          onClick={() => { setEditingId(null); setShowForm(true); }}
+          className="btn-primary flex items-center gap-2 whitespace-nowrap"
+        >
+          <Icon name="PlusIcon" size={18} className="text-white" />
+          <span className="hidden sm:inline">Nueva</span>
+        </button>
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide pb-1">
+        {filterTabs.map((f) => (
+          <button
+            key={`filter-${f.key}`}
+            onClick={() => setFilterStatus(f.key)}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+              filterStatus === f.key ? 'bg-[#1B4F72] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* List */}
+      <div className="space-y-3">
+        {filtered.length === 0 && (
+          <div className="card p-10 text-center">
+            <Icon name="ClipboardDocumentCheckIcon" size={48} className="text-gray-300 mx-auto mb-3" />
+            <p className="font-semibold text-gray-500">
+              {search ? `Sin resultados para "${search}"` : 'No hay inspecciones'}
+            </p>
+            <p className="text-sm text-gray-400 mt-1">
+              {search ? 'Intente con otro término de búsqueda' : 'Crea una nueva inspección para comenzar'}
+            </p>
+            {!search && (
+              <button onClick={() => setShowForm(true)} className="btn-primary mt-4 mx-auto">
+                Nueva Inspección
+              </button>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <Icon name="PlusIcon" size={18} className="text-white" />
-            <span className="hidden sm:inline">Nueva</span>
-          </div>
-        </div>
-
-        {/* Filter tabs */}
-        <div className="flex gap-2 mb-4 overflow-x-auto scrollbar-hide pb-1">
-          {filterTabs.map((f) => (
-              <button
-                  key={`filter-${f.key}`}
-                  onClick={() => setFilterStatus(f.key)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-                      filterStatus === f.key ? 'bg-[#1B4F72] text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-              >
-                {f.label}
-              </button>
-          ))}
-        </div>
-
-        {/* List */}
-        <div className="space-y-3">
-          {filtered.length === 0 && (
-              <div className="card p-10 text-center">
-                <Icon name="ClipboardDocumentCheckIcon" size={48} className="text-gray-300 mx-auto mb-3" />
-                <p className="font-semibold text-gray-500">
-                  {search ? `Sin resultados para "${search}"` : 'No hay inspecciones'}
-                </p>
-                <p className="text-sm text-gray-400 mt-1">
-                  {search ? 'Intente con otro término de búsqueda' : 'Crea una nueva inspección para comenzar'}
-                </p>
-                {!search && (
-                    <p className="text-sm text-gray-400 mt-4">Crea una nueva inspección para comenzar</p>
-                )}
-              </div>
-          )}
-          {filtered.map((insp) => (
-              <div
-                  key={insp.id}
-                  className={`card p-4 active:scale-[0.99] transition-transform ${
-                      insp.isLocked ? 'border-l-4 border-l-amber-400' :
-                          insp.status === 'archivado' ? 'border-l-4 border-l-purple-400 opacity-80' :
-                              insp.status === 'pendiente_revision' ? 'border-l-4 border-l-orange-400' :
-                                  insp.status === 'rechazado' ? 'border-l-4 border-l-red-400' :
-                                      insp.status === 'aprobado' ? 'border-l-4 border-l-green-400' : ''
-                  }`}
-              >
-                <div className="flex items-start justify-between mb-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-lg font-bold text-[#1B4F72]">{insp.placa}</span>
-                      {insp.enterpriseId && (
-                          <span className="text-xs font-mono font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{insp.enterpriseId}</span>
-                      )}
-                      <StatusBadge status={insp.status} />
-                      {insp.isLocked && (
-                          <span className="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+        )}
+        {filtered.map((insp) => (
+          <div
+            key={insp.id}
+            className={`card p-4 active:scale-[0.99] transition-transform ${
+              insp.isLocked ? 'border-l-4 border-l-amber-400' :
+                insp.status === 'archivado' ? 'border-l-4 border-l-purple-400 opacity-80' :
+                  insp.status === 'pendiente_revision' ? 'border-l-4 border-l-orange-400' :
+                    insp.status === 'rechazado' ? 'border-l-4 border-l-red-400' :
+                      insp.status === 'aprobado' ? 'border-l-4 border-l-green-400' : ''
+            }`}
+          >
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-lg font-bold text-[#1B4F72]">{insp.placa}</span>
+                  {insp.enterpriseId && (
+                    <span className="text-xs font-mono font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">{insp.enterpriseId}</span>
+                  )}
+                  <StatusBadge status={insp.status} />
+                  {insp.isLocked && (
+                    <span className="flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
                       <Icon name="LockClosedIcon" size={11} className="text-amber-600" />
                       Bloqueada
                     </span>
-                      )}
-                      {((insp.datos as Record<string, unknown>)?.pdfGenerationCount as number) > 0 && (
-                          <span className="flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
+                  )}
+                  {((insp.datos as Record<string, unknown>)?.pdfGenerationCount as number) > 0 && (
+                    <span className="flex items-center gap-1 text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
                       <Icon name="DocumentTextIcon" size={11} className="text-blue-600" />
                       PDF #{(insp.datos as Record<string, unknown>)?.pdfGenerationCount as number}
                     </span>
-                      )}
-                    </div>
-                    <p className="text-sm font-semibold text-gray-700">{insp.marca} {insp.modelo} — {insp.color}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{insp.propietario}</p>
-                    {insp.inspectorName && (
-                        <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                          <Icon name="UserIcon" size={11} className="text-gray-400" />
-                          {insp.inspectorName}
-                        </p>
-                    )}
-                    {insp.rejectionReason && (
-                        <p className="text-xs text-red-600 mt-1 bg-red-50 px-2 py-1 rounded-lg">
-                          ✗ {insp.rejectionReason}
-                        </p>
-                    )}
-                  </div>
-                  <div className="flex flex-col items-end gap-1 ml-2">
-                    <span className="text-xs text-gray-400">{insp.fecha}</span>
-                    {insp.finalizationTimestamp && (
-                        <span className="text-xs text-amber-600 font-semibold">
+                  )}
+                </div>
+                <p className="text-sm font-semibold text-gray-700">{insp.marca} {insp.modelo} — {insp.color}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{insp.propietario}</p>
+                {insp.inspectorName && (
+                  <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                    <Icon name="UserIcon" size={11} className="text-gray-400" />
+                    {insp.inspectorName}
+                  </p>
+                )}
+                {insp.rejectionReason && (
+                  <p className="text-xs text-red-600 mt-1 bg-red-50 px-2 py-1 rounded-lg">
+                    ✗ {insp.rejectionReason}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-col items-end gap-1 ml-2">
+                <span className="text-xs text-gray-400">{insp.fecha}</span>
+                {insp.finalizationTimestamp && (
+                  <span className="text-xs text-amber-600 font-semibold">
                     Fin: {new Date(insp.finalizationTimestamp).toLocaleDateString('es-ES')}
                   </span>
-                    )}
-                    <div className="flex items-center gap-1">
-                      {isAdmin && insp.auditLog && insp.auditLog.length > 0 && (
-                          <button
-                              onClick={() => setShowAuditId(showAuditId === insp.id ? null : insp.id)}
-                              className="p-1 rounded-lg hover:bg-blue-50 transition-colors"
-                              title="Ver historial de auditoría"
-                          >
-                            <Icon name="ClockIcon" size={14} className="text-blue-400" />
-                          </button>
-                      )}
-                      {isAdmin && (
-                          <button
-                              onClick={() => handleDelete(insp.id, insp.placa)}
-                              className="p-1 rounded-lg hover:bg-red-50 transition-colors"
-                              title="Eliminar"
-                          >
-                            <Icon name="TrashIcon" size={14} className="text-red-400" />
-                          </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Audit trail panel */}
-                {showAuditId === insp.id && insp.auditLog && (
-                    <div className="mb-3 bg-blue-50 border border-blue-100 rounded-xl p-3">
-                      <p className="text-xs font-bold text-blue-700 mb-2 flex items-center gap-1">
-                        <Icon name="ClockIcon" size={12} className="text-blue-600" />
-                        Historial de Auditoría — {insp.enterpriseId || insp.id.slice(-8)}
-                      </p>
-                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
-                        {insp.auditLog.map((entry, idx) => (
-                            <div key={`audit-${idx}`} className="flex items-start gap-2 text-xs">
-                      <span className={`px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${
-                          entry.action === 'finalized' ? 'bg-amber-100 text-amber-700' :
-                              entry.action === 'unlocked' ? 'bg-orange-100 text-orange-700' :
-                                  entry.action === 'archived' ? 'bg-purple-100 text-purple-700' :
-                                      entry.action === 'pdf_generated' ? 'bg-blue-100 text-blue-700' :
-                                          entry.action === 'created' ? 'bg-green-100 text-green-700' :
-                                              entry.action === 'approved' ? 'bg-green-100 text-green-700' :
-                                                  entry.action === 'rejected' ? 'bg-red-100 text-red-700' :
-                                                      entry.action === 'submitted_for_review'? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'
-                      }`}>{entry.action}</span>
-                              <span className="text-gray-600">{entry.performedByName || 'Sistema'}</span>
-                              {entry.details && <span className="text-gray-400 truncate max-w-[120px]">{entry.details}</span>}
-                              <span className="text-gray-400 ml-auto flex-shrink-0">{new Date(entry.timestamp).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
-                            </div>
-                        ))}
-                      </div>
-                    </div>
                 )}
-
-                {/* Progress */}
-                <div className="mt-2">
-                  <div className="flex justify-between items-center mb-1">
-                    <span className="text-xs text-gray-500">Secciones completadas</span>
-                    <span className="text-xs font-bold text-gray-700">{insp.seccionesCompletadas}/{insp.totalSecciones}</span>
-                  </div>
-                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                        className={`h-2 rounded-full transition-all ${
-                            insp.status === 'archivado' ? 'bg-purple-400' :
-                                insp.status === 'aprobado' ? 'bg-green-500' :
-                                    insp.status === 'rechazado'? 'bg-red-400' : insp.isLocked ?'bg-amber-400' :
-                                        insp.seccionesCompletadas === insp.totalSecciones ? 'bg-green-500' : 'bg-[#1B4F72]'
-                        }`}
-                        style={{ width: `${(insp.seccionesCompletadas / insp.totalSecciones) * 100}%` }}
-                    />
-                  </div>
-                </div>
-
-                <div className="flex gap-2 mt-3 flex-wrap">
-                  <div className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#1B4F72] text-white text-sm font-semibold min-w-0 opacity-50 cursor-not-allowed">
-                    <Icon name={insp.isLocked || insp.status === 'archivado' ? 'EyeIcon' : 'PencilSquareIcon'} size={16} className="text-white" />
-                    {insp.isLocked || insp.status === 'archivado' ? 'Ver' : insp.status === 'aprobado' ? 'Ver' : 'Continuar'}
-                  </div>
-
-                  {/* Admin: Approve/Reject for pending review */}
-                  {isAdmin && insp.status === 'pendiente_revision' && (
-                      <>
-                        <button
-                            onClick={() => handleApprove(insp.id, insp.placa)}
-                            className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-green-100 text-green-700 text-sm font-semibold active:scale-95 transition-all hover:bg-green-200"
-                        >
-                          <Icon name="CheckIcon" size={16} className="text-green-600" />
-                          <span className="hidden sm:inline">Aprobar</span>
-                        </button>
-                        <button
-                            onClick={() => handleReject(insp.id)}
-                            className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-red-100 text-red-700 text-sm font-semibold active:scale-95 transition-all hover:bg-red-200"
-                        >
-                          <Icon name="XMarkIcon" size={16} className="text-red-600" />
-                          <span className="hidden sm:inline">Rechazar</span>
-                        </button>
-                      </>
+                <div className="flex items-center gap-1">
+                  {isAdmin && insp.auditLog && insp.auditLog.length > 0 && (
+                    <button
+                      onClick={() => setShowAuditId(showAuditId === insp.id ? null : insp.id)}
+                      className="p-1 rounded-lg hover:bg-blue-50 transition-colors"
+                      title="Ver historial de auditoría"
+                    >
+                      <Icon name="ClockIcon" size={14} className="text-blue-400" />
+                    </button>
                   )}
-
-                  {/* Admin: Finalizar for approved/completed records */}
-                  {isAdmin && insp.status === 'aprobado' && (
-                      <button
-                          onClick={() => handleFinalize(insp.id, insp.placa)}
-                          className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-emerald-100 text-emerald-700 text-sm font-semibold active:scale-95 transition-all hover:bg-emerald-200"
-                          title="Finalizar y bloquear permanentemente (Admin)"
-                      >
-                        <Icon name="LockClosedIcon" size={16} className="text-emerald-600" />
-                        <span className="hidden sm:inline">Finalizar</span>
-                      </button>
-                  )}
-
-                  {isAdmin && insp.isLocked && insp.status !== 'archivado' && (
-                      <button
-                          onClick={() => handleUnlock(insp.id, insp.placa)}
-                          className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-100 text-amber-700 text-sm font-semibold active:scale-95 transition-all hover:bg-amber-200"
-                          title="Desbloquear para edición (Admin)"
-                      >
-                        <Icon name="LockOpenIcon" size={16} className="text-amber-600" />
-                        <span className="hidden sm:inline">Desbloquear</span>
-                      </button>
-                  )}
-
-                  {isAdmin && insp.isLocked && insp.status !== 'archivado' && (
-                      <button
-                          onClick={() => handleArchive(insp.id, insp.placa)}
-                          className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-purple-100 text-purple-700 text-sm font-semibold active:scale-95 transition-all hover:bg-purple-200"
-                          title="Archivar inspección"
-                      >
-                        <Icon name="ArchiveBoxIcon" size={16} className="text-purple-600" />
-                        <span className="hidden sm:inline">Archivar</span>
-                      </button>
-                  )}
-
-                  <button
-                      onClick={() => handleGeneratePdf(insp, isAdmin && insp.isLocked)}
-                      className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold active:scale-95 transition-all ${
-                          isAdmin && insp.isLocked
-                              ? 'bg-[#1B4F72] text-white hover:bg-[#154360]'
-                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}
-                      title={isAdmin && insp.isLocked ? 'Regenerar PDF (Admin)' : 'Descargar reporte PDF completo'}
-                  >
-                    <Icon name="DocumentArrowDownIcon" size={16} className={isAdmin && insp.isLocked ? 'text-white' : 'text-gray-600'} />
-                    {isAdmin && insp.isLocked ? 'Regen. PDF' : 'PDF'}
-                  </button>
-
-                  {/* Server-side PDF download (requires inspection synced to Supabase) */}
-                  {insp.syncStatus === 'synced' && (
-                      <button
-                          onClick={() => handleServerPdfDownload(insp)}
-                          disabled={serverPdfLoadingId === insp.id}
-                          className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold active:scale-95 transition-all bg-emerald-100 text-emerald-700 hover:bg-emerald-200 disabled:opacity-60"
-                          title="Descargar PDF del servidor (con imágenes firmadas)"
-                      >
-                        {serverPdfLoadingId === insp.id
-                            ? <Icon name="ArrowPathIcon" size={16} className="text-emerald-600 animate-spin" />
-                            : <Icon name="CloudArrowDownIcon" size={16} className="text-emerald-600" />
-                        }
-                        <span className="hidden sm:inline">PDF↓</span>
-                      </button>
+                  {isAdmin && (
+                    <button
+                      onClick={() => handleDelete(insp.id, insp.placa)}
+                      className="p-1 rounded-lg hover:bg-red-50 transition-colors"
+                      title="Eliminar"
+                    >
+                      <Icon name="TrashIcon" size={14} className="text-red-400" />
+                    </button>
                   )}
                 </div>
               </div>
-          ))}
-        </div>
+            </div>
+
+            {/* Audit trail panel */}
+            {showAuditId === insp.id && insp.auditLog && (
+              <div className="mb-3 bg-blue-50 border border-blue-100 rounded-xl p-3">
+                <p className="text-xs font-bold text-blue-700 mb-2 flex items-center gap-1">
+                  <Icon name="ClockIcon" size={12} className="text-blue-600" />
+                  Historial de Auditoría — {insp.enterpriseId || insp.id.slice(-8)}
+                </p>
+                <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                  {insp.auditLog.map((entry, idx) => (
+                    <div key={`audit-${idx}`} className="flex items-start gap-2 text-xs">
+                      <span className={`px-1.5 py-0.5 rounded font-bold flex-shrink-0 ${
+                        entry.action === 'finalized' ? 'bg-amber-100 text-amber-700' :
+                          entry.action === 'unlocked' ? 'bg-orange-100 text-orange-700' :
+                            entry.action === 'archived' ? 'bg-purple-100 text-purple-700' :
+                              entry.action === 'pdf_generated' ? 'bg-blue-100 text-blue-700' :
+                                entry.action === 'created' ? 'bg-green-100 text-green-700' :
+                                  entry.action === 'approved' ? 'bg-green-100 text-green-700' :
+                                    entry.action === 'rejected' ? 'bg-red-100 text-red-700' :
+                                      entry.action === 'submitted_for_review'? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'
+                      }`}>{entry.action}</span>
+                      <span className="text-gray-600">{entry.performedByName || 'Sistema'}</span>
+                      {entry.details && <span className="text-gray-400 truncate max-w-[120px]">{entry.details}</span>}
+                      <span className="text-gray-400 ml-auto flex-shrink-0">{new Date(entry.timestamp).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Progress */}
+            <div className="mt-2">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-xs text-gray-500">Secciones completadas</span>
+                <span className="text-xs font-bold text-gray-700">{insp.seccionesCompletadas}/{insp.totalSecciones}</span>
+              </div>
+              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    insp.status === 'archivado' ? 'bg-purple-400' :
+                      insp.status === 'aprobado' ? 'bg-green-500' :
+                        insp.status === 'rechazado'? 'bg-red-400' : insp.isLocked ?'bg-amber-400' :
+                          insp.seccionesCompletadas === insp.totalSecciones ? 'bg-green-500' : 'bg-[#1B4F72]'
+                  }`}
+                  style={{ width: `${(insp.seccionesCompletadas / insp.totalSecciones) * 100}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2 mt-3 flex-wrap">
+              <button
+                onClick={() => { setEditingId(insp.id); setShowForm(true); }}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#1B4F72] text-white text-sm font-semibold active:scale-95 transition-all min-w-0"
+              >
+                <Icon name={insp.isLocked || insp.status === 'archivado' ? 'EyeIcon' : 'PencilSquareIcon'} size={16} className="text-white" />
+                {insp.isLocked || insp.status === 'archivado' ? 'Ver' : insp.status === 'aprobado' ? 'Ver' : 'Continuar'}
+              </button>
+
+              {/* Admin: Approve/Reject for pending review */}
+              {isAdmin && insp.status === 'pendiente_revision' && (
+                <>
+                  <button
+                    onClick={() => handleApprove(insp.id, insp.placa)}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-green-100 text-green-700 text-sm font-semibold active:scale-95 transition-all hover:bg-green-200"
+                  >
+                    <Icon name="CheckIcon" size={16} className="text-green-600" />
+                    <span className="hidden sm:inline">Aprobar</span>
+                  </button>
+                  <button
+                    onClick={() => handleReject(insp.id)}
+                    className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-red-100 text-red-700 text-sm font-semibold active:scale-95 transition-all hover:bg-red-200"
+                  >
+                    <Icon name="XMarkIcon" size={16} className="text-red-600" />
+                    <span className="hidden sm:inline">Rechazar</span>
+                  </button>
+                </>
+              )}
+
+              {/* Admin: Finalizar for approved/completed records */}
+              {isAdmin && insp.status === 'aprobado' && (
+                <button
+                  onClick={() => handleFinalize(insp.id, insp.placa)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-emerald-100 text-emerald-700 text-sm font-semibold active:scale-95 transition-all hover:bg-emerald-200"
+                  title="Finalizar y bloquear permanentemente (Admin)"
+                >
+                  <Icon name="LockClosedIcon" size={16} className="text-emerald-600" />
+                  <span className="hidden sm:inline">Finalizar</span>
+                </button>
+              )}
+
+              {isAdmin && insp.isLocked && insp.status !== 'archivado' && (
+                <button
+                  onClick={() => handleUnlock(insp.id, insp.placa)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-amber-100 text-amber-700 text-sm font-semibold active:scale-95 transition-all hover:bg-amber-200"
+                  title="Desbloquear para edición (Admin)"
+                >
+                  <Icon name="LockOpenIcon" size={16} className="text-amber-600" />
+                  <span className="hidden sm:inline">Desbloquear</span>
+                </button>
+              )}
+
+              {isAdmin && insp.isLocked && insp.status !== 'archivado' && (
+                <button
+                  onClick={() => handleArchive(insp.id, insp.placa)}
+                  className="flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-purple-100 text-purple-700 text-sm font-semibold active:scale-95 transition-all hover:bg-purple-200"
+                  title="Archivar inspección"
+                >
+                  <Icon name="ArchiveBoxIcon" size={16} className="text-purple-600" />
+                  <span className="hidden sm:inline">Archivar</span>
+                </button>
+              )}
+
+              <button
+                onClick={() => handleGeneratePdf(insp, isAdmin && insp.isLocked)}
+                className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold active:scale-95 transition-all ${
+                  isAdmin && insp.isLocked
+                    ? 'bg-[#1B4F72] text-white hover:bg-[#154360]'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title={isAdmin && insp.isLocked ? 'Regenerar PDF (Admin)' : 'Descargar reporte PDF completo'}
+              >
+                <Icon name="DocumentArrowDownIcon" size={16} className={isAdmin && insp.isLocked ? 'text-white' : 'text-gray-600'} />
+                {isAdmin && insp.isLocked ? 'Regen. PDF' : 'PDF'}
+              </button>
+
+              {/* Server-side PDF download (requires inspection synced to Supabase) */}
+              {insp.syncStatus === 'synced' && (
+                <button
+                  onClick={() => handleServerPdfDownload(insp)}
+                  disabled={serverPdfLoadingId === insp.id}
+                  className="flex items-center justify-center gap-2 px-3 py-2.5 rounded-xl text-sm font-semibold active:scale-95 transition-all bg-emerald-100 text-emerald-700 hover:bg-emerald-200 disabled:opacity-60"
+                  title="Descargar PDF del servidor (con imágenes firmadas)"
+                >
+                  {serverPdfLoadingId === insp.id
+                    ? <Icon name="ArrowPathIcon" size={16} className="text-emerald-600 animate-spin" />
+                    : <Icon name="CloudArrowDownIcon" size={16} className="text-emerald-600" />
+                  }
+                  <span className="hidden sm:inline">PDF↓</span>
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
+
+      {showForm && (
+        <InspectionFormModal
+          inspectionId={editingId}
+          onClose={handleFormClose}
+        />
+      )}
+    </div>
   );
 }
