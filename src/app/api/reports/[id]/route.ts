@@ -507,7 +507,7 @@ export async function GET(
     const { id } = await params;
 
     // Skip auth check in preview mode
-    const isPreview = process.env.PREVIEW_SKIP_AUTH === 'true';
+    const isPreview =  process.env.PREVIEW_SKIP_AUTH === 'true' &&  process.env.NODE_ENV !== 'production';
 
     const supabase = await createClient();
 
@@ -539,10 +539,10 @@ if (!supabaseUrl) {
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const adminSupabase: ReturnType<typeof createAdminClient<any, 'public', any>> = createAdminClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      serviceRoleKey,
-      { auth: { autoRefreshToken: false, persistSession: false } }
-    );
+  supabaseUrl,
+  serviceRoleKey,
+  { auth: { autoRefreshToken: false, persistSession: false } }
+);
 
     // Fetch through the caller's session first so RLS authorizes the row.
     // The service-role client below is limited to signing already-authorized media.
