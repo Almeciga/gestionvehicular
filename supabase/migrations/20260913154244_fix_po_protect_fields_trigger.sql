@@ -22,6 +22,19 @@
 -- PREREQUISITES — create tables/functions only if missing
 -- ============================================================
 
+-- Add 'comercial' to user_role enum if not already present
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_enum
+    WHERE enumtypid = 'public.user_role'::regtype
+      AND enumlabel = 'comercial'
+  ) THEN
+    ALTER TYPE public.user_role ADD VALUE 'comercial';
+  END IF;
+END;
+$$;
+
 -- profiles.role constraint (allow 'comercial')
 ALTER TABLE public.profiles
   DROP CONSTRAINT IF EXISTS profiles_role_check;
