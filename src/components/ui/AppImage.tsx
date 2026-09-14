@@ -108,8 +108,8 @@ const AppImage = memo(function AppImage({
     }
 
     const customStyle = {
-        width: props.style?.width ?? (width ? 'auto' : undefined),
-        height: props.style?.height ?? (height ? 'auto' : undefined),
+        width: props.style?.width ?? (height && !width ? 'auto' : undefined),
+        height: props.style?.height ?? (width && !height ? 'auto' : undefined),
         ...props.style,
     };
 
