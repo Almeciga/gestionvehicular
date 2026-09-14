@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/lib/supabase/client';
 import AppImage from '@/components/ui/AppImage';
@@ -14,8 +14,12 @@ const bgPatternStyle: React.CSSProperties = {
   backgroundSize: '40px 40px',
 };
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Consume searchParams so Next.js knows this component handles dynamic params
+  // This prevents the SSR bailout crash on /login?rk_owner=true
+  const _params = searchParams?.toString();
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -293,5 +297,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a1628] via-[#1B4F72] to-[#0d2137]"><div className="text-white text-sm">Cargando...</div></div>}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

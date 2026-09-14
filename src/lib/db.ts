@@ -192,6 +192,9 @@ class GVDatabase extends Dexie {
 let _db: GVDatabase | null = null;
 
 export function getDB(): GVDatabase {
+  if (typeof window === 'undefined') {
+    throw new Error('[db] getDB() called during SSR — IndexedDB is not available on the server');
+  }
   if (!_db) {
     _db = new GVDatabase();
   }
