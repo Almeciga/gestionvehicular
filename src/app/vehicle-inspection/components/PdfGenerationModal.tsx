@@ -60,8 +60,7 @@ export default function PdfGenerationModal({
             isError
               ? 'bg-red-50 border-b border-red-100'
               : isDone
-                ? 'bg-green-50 border-b border-green-100'
-                : 'bg-[#1B4F72]'
+                ? 'bg-green-50 border-b border-green-100' :'bg-[#1B4F72]'
           }`}
         >
           <div

@@ -641,8 +641,7 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
                 onClick={() => setActiveView(view.id)}
                 className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
                   activeView === view.id
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200 font-semibold'
-                    : 'text-gray-600 hover:bg-gray-50 border border-transparent'
+                    ? 'bg-blue-50 text-blue-700 border border-blue-200 font-semibold' :'text-gray-600 hover:bg-gray-50 border border-transparent'
                 }`}
               >
                 <span className="text-base">{viewIcons[view.id]}</span>
@@ -811,8 +810,7 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
                   onClick={() => setSelectedTool(null)}
                   className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border-2 transition-all min-w-[60px] ${
                     selectedTool === null
-                      ? 'border-gray-400 bg-gray-100'
-                      : 'border-gray-100 hover:border-gray-200'
+                      ? 'border-gray-400 bg-gray-100' :'border-gray-100 hover:border-gray-200'
                   }`}
                 >
                   <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 text-sm">
