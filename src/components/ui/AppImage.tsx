@@ -107,10 +107,15 @@ const AppImage = memo(function AppImage({
         );
     }
 
-    const customStyle = {
-        width: props.style?.width ?? (height && !width ? 'auto' : undefined),
-        height: props.style?.height ?? (width && !height ? 'auto' : undefined),
-        ...props.style,
+    // Destructure style out of props so it doesn't override customStyle in the spread below
+    const { style: propsStyle, ...restProps } = props;
+
+    const customStyle: React.CSSProperties = {
+        // If only height is given (no width), set width: auto to preserve aspect ratio
+        width: propsStyle?.width ?? (height && !width ? 'auto' : undefined),
+        // If only width is given (no height), set height: auto to preserve aspect ratio
+        height: propsStyle?.height ?? (width && !height ? 'auto' : undefined),
+        ...propsStyle,
     };
 
     return (
@@ -120,7 +125,7 @@ const AppImage = memo(function AppImage({
             height={height || 300}
             sizes={sizes}
             style={customStyle}
-            {...props}
+            {...restProps}
         />
     );
 });
