@@ -111,10 +111,10 @@ const AppImage = memo(function AppImage({
     const { style: propsStyle, ...restProps } = props;
 
     const customStyle: React.CSSProperties = {
-        // If only height is given (no width), set width: auto to preserve aspect ratio
-        width: propsStyle?.width ?? (height && !width ? 'auto' : undefined),
-        // If only width is given (no height), set height: auto to preserve aspect ratio
-        height: propsStyle?.height ?? (width && !height ? 'auto' : undefined),
+        // Always preserve aspect ratio: if width is given, height should be auto (and vice versa)
+        // This prevents the Next.js "width or height modified but not the other" warning
+        width: propsStyle?.width ?? (width ? 'auto' : undefined),
+        height: propsStyle?.height ?? (height ? 'auto' : undefined),
         ...propsStyle,
     };
 
