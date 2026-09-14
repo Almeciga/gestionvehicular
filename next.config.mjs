@@ -16,9 +16,11 @@ const nextConfig = {
     ignoreDuringBuilds: true,
   },
 
-  // Prevent Dexie (IndexedDB) from being bundled into server/serverless functions.
-  // Dexie is a browser-only library; importing it on the server crashes the function.
-  serverExternalPackages: ['dexie'],
+  // NOTE: Do NOT add 'dexie' to serverExternalPackages.
+  // serverExternalPackages tells Next.js to load the package from node_modules at
+  // runtime inside the serverless function — but Netlify Lambda does NOT ship
+  // node_modules, so this causes a MODULE_NOT_FOUND crash (HTTP 502).
+  // Dexie is excluded from server bundles via the webpack externals block below.
 
   images: {
     remotePatterns: imageHosts,

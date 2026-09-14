@@ -49,6 +49,43 @@ const fromStorage = () => {
   }
 };
 
+// ─── Null-safe stub returned when credentials are missing ─────────────────────
+// This prevents createBrowserClient('', '') from throwing "supabaseUrl is required"
+// during SSR / Netlify cold-start when env vars are not yet injected.
+function createNullStub(): ReturnType<typeof createBrowserClient> {
+  const noop = async () => ({ data: null, error: new Error('Supabase not configured') });
+  const stub: any = {
+    auth: {
+      getSession: noop,
+      getUser: noop,
+      signUp: noop,
+      signInWithPassword: noop,
+      signOut: noop,
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+      resetPasswordForEmail: noop,
+      updateUser: noop,
+    },
+    from: () => ({
+      select: () => ({ data: null, error: new Error('Supabase not configured') }),
+      insert: () => ({ data: null, error: new Error('Supabase not configured') }),
+      update: () => ({ data: null, error: new Error('Supabase not configured') }),
+      delete: () => ({ data: null, error: new Error('Supabase not configured') }),
+      upsert: () => ({ data: null, error: new Error('Supabase not configured') }),
+      eq: function() { return this; },
+      maybeSingle: () => ({ data: null, error: new Error('Supabase not configured') }),
+    }),
+    rpc: noop,
+    storage: {
+      from: () => ({
+        upload: noop,
+        getPublicUrl: () => ({ data: { publicUrl: '' } }),
+        remove: noop,
+      }),
+    },
+  };
+  return stub as ReturnType<typeof createBrowserClient>;
+}
+
 // Singleton instance — created once, reused on every call
 let clientInstance: ReturnType<typeof createBrowserClient> | null = null;
 
@@ -58,17 +95,15 @@ export function createClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  if (!supabaseUrl || !supabaseAnonKey) {
-    // Log clearly so the error appears in Netlify function logs.
-    // Do NOT throw here — a throw at module level during SSR/cold-start
-    // causes an unhandled exception → Netlify 502 "function crashed".
+  // Guard: if either credential is falsy or an empty string, do NOT call
+  // createBrowserClient — it throws "supabaseUrl is required" synchronously,
+  // which crashes the serverless function with a 502 during SSR / cold-start.
+  if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.trim() === '' || supabaseAnonKey.trim() === '') {
     console.error(
       '[supabase/client] NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY is not defined. ' +
       'Set these environment variables in your Netlify site settings → Environment variables.'
     );
-    // Return a minimal stub so the import chain doesn't crash the function.
-    // The UI will show "BD Sin conexión" and login attempts will fail gracefully.
-    return createBrowserClient('https://placeholder.supabase.co', 'placeholder') as ReturnType<typeof createBrowserClient>;
+    return createNullStub();
   }
 
   clientInstance = createBrowserClient(

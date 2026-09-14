@@ -258,7 +258,7 @@ export async function processSyncQueue(): Promise<{ synced: number; failed: numb
     const pendingItems = await db.sync_queue
         .where('status')
         .anyOf(['pending', 'failed'])
-        .and((item) => item.retry_count < 5)
+        .and((item: import('@/lib/db').DBSyncQueueItem) => item.retry_count < 5)
         .toArray();
 
     _metrics.pendingQueueSize = pendingItems.length;
@@ -302,7 +302,7 @@ export async function processSyncQueue(): Promise<{ synced: number; failed: numb
     await db.sync_queue
         .where('status')
         .equals('done')
-        .and((item) => item.created_at < cutoff)
+        .and((item: import('@/lib/db').DBSyncQueueItem) => item.created_at < cutoff)
         .delete();
   } catch (err) {
     console.error('[SyncService] Queue processing error:', err);
@@ -615,7 +615,7 @@ export async function enqueueOperation(
         .where('status')
         .anyOf(['pending', 'failed'])
         .and(
-            (item) =>
+            (item: import('@/lib/db').DBSyncQueueItem) =>
                 item.table_name === tableName && item.record_id === recordId && item.retry_count < 5
         )
         .first();
@@ -670,7 +670,7 @@ export async function getPendingQueueCount(): Promise<number> {
   return db.sync_queue
       .where('status')
       .anyOf(['pending', 'failed'])
-      .and((item) => item.retry_count < 5)
+      .and((item: import('@/lib/db').DBSyncQueueItem) => item.retry_count < 5)
       .count();
 }
 
