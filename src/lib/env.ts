@@ -5,10 +5,14 @@
 function requireEnv(name: string): string {
   const val = process.env[name];
   if (!val) {
-    throw new Error(
+    // Log a clear warning but do NOT throw at module-evaluation time —
+    // a hard throw here crashes the Netlify serverless function with a 502
+    // if env vars are not yet injected into the runtime.
+    console.error(
       `[env] Variable de entorno requerida no encontrada: ${name}. ` +
       `Asegúrate de que esté definida en tu archivo .env o en las variables de entorno del servidor.`
     );
+    return '';
   }
   return val;
 }
