@@ -7,6 +7,31 @@ const PUBLIC_ROUTES = ['/login', '/auth/callback', '/reset-password'];
 // Admin-only routes (inspectors are redirected away)
 const ADMIN_ROUTES = ['/users-management', '/materials-management', '/vehicle-production'];
 
+/**
+ * Returns true if the given pathname matches a public route.
+ * Uses exact match or segment-based matching to avoid false positives.
+ */
+function isPublicPathname(pathname: string): boolean {
+  return PUBLIC_ROUTES.some(
+    (route) => pathname === route || pathname.startsWith(`${route}/`)
+  );
+}
+
+/**
+ * Redirects a protected route to /login?error=auth_unavailable.
+ * If the route is public, returns NextResponse.next() instead.
+ */
+function failClosed(request: NextRequest): NextResponse {
+  const pathname = request.nextUrl.pathname;
+  if (isPublicPathname(pathname)) {
+    return NextResponse.next();
+  }
+  const url = request.nextUrl.clone();
+  url.pathname = '/login';
+  url.searchParams.set('error', 'auth_unavailable');
+  return NextResponse.redirect(url);
+}
+
 export async function middleware(request: NextRequest) {
   try {
     // PREVIEW ONLY: bypass all auth checks when PREVIEW_SKIP_AUTH is enabled
@@ -24,8 +49,11 @@ export async function middleware(request: NextRequest) {
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseAnonKey) {
-      console.error('[middleware] Missing Supabase environment variables — failing open');
-      return NextResponse.next();
+      console.error(
+        '[middleware] Missing Supabase environment variables.',
+        'pathname:', request.nextUrl.pathname
+      );
+      return failClosed(request);
     }
 
     const supabase = createServerClient(
@@ -62,15 +90,20 @@ export async function middleware(request: NextRequest) {
       const { data } = await supabase.auth.getUser();
       user = data?.user ?? null;
     } catch (authErr) {
-      console.error('[middleware] supabase.auth.getUser() threw — failing open:', authErr);
-      return NextResponse.next();
+      const errMsg = authErr instanceof Error ? authErr.message : String(authErr);
+      const errType = authErr instanceof Error ? authErr.constructor.name : typeof authErr;
+      console.error(
+        '[middleware] supabase.auth.getUser() failed.',
+        'pathname:', request.nextUrl.pathname,
+        'errorType:', errType,
+        'errorMessage:', errMsg
+      );
+      return failClosed(request);
     }
 
     const pathname = request.nextUrl.pathname;
     // Use exact match or segment-based matching to avoid false positives (e.g. /login-extra)
-    const isPublicRoute = PUBLIC_ROUTES.some(
-      (route) => pathname === route || pathname.startsWith(`${route}/`)
-    );
+    const isPublicRoute = isPublicPathname(pathname);
 
     // If not authenticated and trying to access a protected route, redirect to login
     if (!user && !isPublicRoute) {
@@ -165,10 +198,17 @@ export async function middleware(request: NextRequest) {
     return supabaseResponse;
   } catch (unexpectedErr) {
     // Top-level safety net: if anything above throws unexpectedly,
-    // fail open so the serverless function returns a valid response
-    // instead of crashing with a 502 Bad Gateway.
-    console.error('[middleware] Unexpected error — failing open:', unexpectedErr);
-    return NextResponse.next();
+    // apply fail-closed strategy — public routes pass through, protected routes
+    // redirect to /login?error=auth_unavailable instead of crashing with a 502.
+    const errMsg = unexpectedErr instanceof Error ? unexpectedErr.message : String(unexpectedErr);
+    const errType = unexpectedErr instanceof Error ? unexpectedErr.constructor.name : typeof unexpectedErr;
+    console.error(
+      '[middleware] Unexpected error in middleware.',
+      'pathname:', request.nextUrl.pathname,
+      'errorType:', errType,
+      'errorMessage:', errMsg
+    );
+    return failClosed(request);
   }
 }
 

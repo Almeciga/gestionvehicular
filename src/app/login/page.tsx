@@ -20,6 +20,7 @@ function LoginPageInner() {
   // Consume searchParams so Next.js knows this component handles dynamic params
   // This prevents the SSR bailout crash on /login?rk_owner=true
   const _params = searchParams?.toString();
+  const authError = searchParams?.get('error');
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -201,6 +202,16 @@ function LoginPageInner() {
             )}
           </div>
         </div>
+
+        {/* Auth unavailable error banner */}
+        {authError === 'auth_unavailable' && (
+          <div className="mb-4 bg-red-500/20 border border-red-400/30 rounded-xl px-4 py-3 flex items-center gap-2">
+            <AppIcon name="ExclamationTriangleIcon" size={16} className="text-red-300 flex-shrink-0" />
+            <p className="text-xs text-red-200 font-semibold">
+              Authentication service is temporarily unavailable. Please try again later.
+            </p>
+          </div>
+        )}
 
         {/* Retry countdown banner */}
         {retryCountdown > 0 && (
