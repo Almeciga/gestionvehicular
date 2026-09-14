@@ -146,9 +146,6 @@ export async function initialDataDownload(): Promise<{ success: boolean; error?:
     _metrics.endTime = Date.now();
     _metrics.lastSyncDuration = _metrics.endTime - syncStart;
 
-    console.log(
-        `[SyncService] Initial download complete: ${_metrics.downloadedRows} rows in ${_metrics.lastSyncDuration}ms`
-    );
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('gv-sync-complete'));
     return { success: true };
   } catch (err) {
@@ -234,7 +231,6 @@ export async function incrementalSync(
     }
 
     _metrics.downloadedRows += totalDownloaded;
-    console.log(`[SyncService] Incremental sync: ${totalDownloaded} rows updated`);
     if (totalDownloaded > 0 && typeof window !== 'undefined')
       window.dispatchEvent(new Event('gv-sync-complete'));
     return { success: true, downloaded: totalDownloaded };
