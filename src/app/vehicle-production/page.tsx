@@ -4,7 +4,7 @@ import VehicleProductionView from './components/VehicleProductionView';
 
 export default function VehicleProductionPage() {
   return (
-    <AppLayout title="Producción Vehicular">
+    <AppLayout title="Seguimiento de Producción">
       <VehicleProductionView />
     </AppLayout>
   );
