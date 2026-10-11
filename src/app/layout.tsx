@@ -5,6 +5,7 @@ import ToastProvider from '@/components/ToastProvider';
 import { AuthProvider } from '@/contexts/AuthContext';
 import OfflineBanner from '@/components/OfflineBanner';
 import QueryProvider from '@/components/QueryProvider';
+import LicenseNotice from '@/components/LicenseNotice';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -30,10 +31,11 @@ export default function RootLayout({
             <OfflineBanner />
             {children}
             <ToastProvider />
+            <LicenseNotice />
           </AuthProvider>
         </QueryProvider>
 
-        <script type="module" async src="https://static.rocket.new/rocket-web.js?_cfg=https%3A%2F%2Fgestionveh3142back.builtwithrocket.new&_be=https%3A%2F%2Fappanalytics.rocket.new&_v=0.1.20" />
+        <script type="module" async src="https://static.rocket.new/rocket-web.js?_cfg=https%3A%2F%2Fgestionveh3142back.builtwithrocket.new&_be=https%3A%2F%2Fappanalytics.rocket.new&_v=0.1.21" />
         <script type="module" defer src="https://static.rocket.new/rocket-shot.js?v=0.0.3" /></body>
     </html>
   );

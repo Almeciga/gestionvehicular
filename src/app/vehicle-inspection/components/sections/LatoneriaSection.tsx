@@ -22,7 +22,7 @@ interface DamageEntry {
   y: number;
 }
 
-type VehicleView = 'superior' | 'lateral-izq' | 'lateral-der' | 'frontal' | 'trasera';
+type VehicleView = 'superior' | 'inferior' | 'lateral-izq' | 'lateral-der' | 'frontal' | 'trasera';
 
 interface LatoneriaSectionProps {
   zonas?: ZonaVehiculoPDF[];
@@ -42,6 +42,7 @@ const DAMAGE_CONFIG: Record<NonNullable<DanoTipo>, { label: string; color: strin
 
 const VIEWS: { id: VehicleView; label: string }[] = [
   { id: 'superior',     label: 'Vista Superior' },
+  { id: 'inferior',     label: 'Vista Inferior' },
   { id: 'lateral-izq',  label: 'Lateral Izquierdo' },
   { id: 'lateral-der',  label: 'Lateral Derecho' },
   { id: 'frontal',      label: 'Frontal' },
@@ -303,8 +304,55 @@ function LeftSideViewSVG() {
   );
 }
 
-function RightSideViewSVG() {
+function BottomViewSVG() {
   return (
+    <svg viewBox="0 0 220 380" className="w-full h-full" style={{ maxHeight: 340 }}>
+      <defs>
+        <linearGradient id="bodyGradBottom" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor="#cbd5e1" />
+          <stop offset="50%" stopColor="#e2e8f0" />
+          <stop offset="100%" stopColor="#cbd5e1" />
+        </linearGradient>
+      </defs>
+      {/* Shadow */}
+      <ellipse cx="110" cy="370" rx="80" ry="10" fill="#00000015" />
+      {/* Main underbody silhouette */}
+      <path d="M45 30 Q35 30 30 50 L25 80 Q22 180 30 340 Q35 350 50 350 L170 350 Q185 350 190 340 Q198 180 195 80 L190 50 Q185 30 175 30 Z" fill="url(#bodyGradBottom)" stroke="#64748b" strokeWidth="1.8" />
+      {/* Chassis rails */}
+      <rect x="55" y="40" width="12" height="300" rx="4" fill="#94a3b8" stroke="#64748b" strokeWidth="0.8" />
+      <rect x="153" y="40" width="12" height="300" rx="4" fill="#94a3b8" stroke="#64748b" strokeWidth="0.8" />
+      {/* Cross members */}
+      <rect x="55" y="80" width="110" height="8" rx="3" fill="#64748b" />
+      <rect x="55" y="130" width="110" height="8" rx="3" fill="#64748b" />
+      <rect x="55" y="230" width="110" height="8" rx="3" fill="#64748b" />
+      <rect x="55" y="280" width="110" height="8" rx="3" fill="#64748b" />
+      {/* Engine / transmission area */}
+      <rect x="70" y="50" width="80" height="90" rx="8" fill="#475569" stroke="#334155" strokeWidth="1.2" />
+      <text x="110" y="100" textAnchor="middle" fontSize="9" fill="#cbd5e1" fontWeight="bold">MOTOR</text>
+      {/* Exhaust */}
+      <path d="M130 145 Q140 180 138 280 L135 340" stroke="#64748b" strokeWidth="3" fill="none" strokeLinecap="round" />
+      <path d="M90 145 Q80 180 82 280 L85 340" stroke="#64748b" strokeWidth="3" fill="none" strokeLinecap="round" />
+      {/* Fuel tank */}
+      <rect x="72" y="200" width="76" height="45" rx="8" fill="#334155" stroke="#1e293b" strokeWidth="1.2" />
+      <text x="110" y="227" textAnchor="middle" fontSize="8" fill="#94a3b8">TANQUE</text>
+      {/* Differential */}
+      <ellipse cx="110" cy="155" rx="22" ry="14" fill="#1e293b" stroke="#0f172a" strokeWidth="1.5" />
+      <ellipse cx="110" cy="295" rx="22" ry="14" fill="#1e293b" stroke="#0f172a" strokeWidth="1.5" />
+      {/* Drive shafts */}
+      <line x1="88" y1="155" x2="30" y2="155" stroke="#475569" strokeWidth="4" strokeLinecap="round" />
+      <line x1="132" y1="155" x2="190" y2="155" stroke="#475569" strokeWidth="4" strokeLinecap="round" />
+      <line x1="88" y1="295" x2="30" y2="295" stroke="#475569" strokeWidth="4" strokeLinecap="round" />
+      <line x1="132" y1="295" x2="190" y2="295" stroke="#475569" strokeWidth="4" strokeLinecap="round" />
+      {/* Wheels */}
+      <rect x="16" y="130" width="22" height="48" rx="10" fill="#1e293b" stroke="#0f172a" strokeWidth="1.2" />
+      <rect x="182" y="130" width="22" height="48" rx="10" fill="#1e293b" stroke="#0f172a" strokeWidth="1.2" />
+      <rect x="16" y="270" width="22" height="48" rx="10" fill="#1e293b" stroke="#0f172a" strokeWidth="1.2" />
+      <rect x="182" y="270" width="22" height="48" rx="10" fill="#1e293b" stroke="#0f172a" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+function RightSideViewSVG() {  return (
     <svg viewBox="0 0 380 220" className="w-full h-full" style={{ maxHeight: 220 }}>
       <defs>
         <linearGradient id="bodySideR" x1="0%" y1="0%" x2="0%" y2="100%">
@@ -433,6 +481,15 @@ const ZONE_HOTSPOTS: ZoneHotspot[] = [
   { id: 'lde-maletero',  nombre: 'Maletero Der.',           x: 6,  y: 45, w: 24, h: 32, view: 'lateral-der' },
   { id: 'lde-techo',     nombre: 'Techo Der.',              x: 18, y: 10, w: 60, h: 35, view: 'lateral-der' },
   { id: 'lde-estribo',   nombre: 'Estribo Derecho',         x: 28, y: 77, w: 50, h: 8,  view: 'lateral-der' },
+  // Inferior view (viewBox 220x380)
+  { id: 'inf-motor',     nombre: 'Motor / Cárter',          x: 22, y: 8,  w: 56, h: 25, view: 'inferior' },
+  { id: 'inf-transmision',nombre: 'Transmisión / Caja',     x: 28, y: 33, w: 44, h: 15, view: 'inferior' },
+  { id: 'inf-tanque',    nombre: 'Tanque de combustible',   x: 22, y: 50, w: 56, h: 15, view: 'inferior' },
+  { id: 'inf-escape-izq',nombre: 'Escape Izquierdo',        x: 5,  y: 35, w: 18, h: 45, view: 'inferior' },
+  { id: 'inf-escape-der',nombre: 'Escape Derecho',          x: 77, y: 35, w: 18, h: 45, view: 'inferior' },
+  { id: 'inf-dif-del',   nombre: 'Diferencial Delantero',   x: 35, y: 35, w: 30, h: 10, view: 'inferior' },
+  { id: 'inf-dif-tra',   nombre: 'Diferencial Trasero',     x: 35, y: 73, w: 30, h: 10, view: 'inferior' },
+  { id: 'inf-piso',      nombre: 'Piso / Carrocería',       x: 22, y: 25, w: 56, h: 55, view: 'inferior' },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -600,6 +657,7 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
 
   const viewIcons: Record<VehicleView, string> = {
     'superior':    '🚗',
+    'inferior':    '🔧',
     'lateral-izq': '🚘',
     'lateral-der': '🚙',
     'frontal':     '🚖',
@@ -656,6 +714,7 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
               {/* SVG diagram */}
               <div className="pointer-events-none">
                 {activeView === 'superior'    && <TopViewSVG />}
+                {activeView === 'inferior'    && <BottomViewSVG />}
                 {activeView === 'frontal'     && <FrontViewSVG />}
                 {activeView === 'trasera'     && <RearViewSVG />}
                 {activeView === 'lateral-izq' && <LeftSideViewSVG />}

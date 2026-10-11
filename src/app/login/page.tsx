@@ -300,6 +300,16 @@ function LoginPageInner() {
                 'Iniciar Sesión'
               )}
             </button>
+
+            {/* Forgot password link */}
+            <div className="text-center">
+              <a
+                href="/forgot-password"
+                className="text-xs text-blue-400 hover:text-blue-300 underline transition-colors"
+              >
+                ¿Olvidaste tu contraseña?
+              </a>
+            </div>
           </form>
         </div>
 

@@ -1,12 +1,12 @@
 'use client';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import Icon from '@/components/ui/AppIcon';
 import PhotoUpload from '@/components/ui/PhotoUpload';
 import { toast } from 'sonner';
 
 import { useAuth } from '@/contexts/AuthContext';
-import type { DBMaterial } from '@/lib/db';
+import type { DBMaterial, DBVehicleBrand } from '@/lib/db';
 import { getOpenInspectionForVehicle, type Inspection } from '@/lib/store';
 
 const statusLabels: Record<string, string> = {
@@ -16,7 +16,7 @@ const statusLabels: Record<string, string> = {
 
 interface MaterialRow {
   id: string;
-  material_id?: string; // reference to the catalog item in `materials` table
+  material_id?: string;
   nombre: string;
   cantidad: string;
   unidad: string;
@@ -31,9 +31,10 @@ interface VehicleFormData {
   vin: string;
   propietario: string;
   fechaCreacion: string;
+  cantidad_puestos: number;
+  cantidad_ejes: number;
 }
 
-const marcas = ['Toyota', 'Chevrolet', 'Ford', 'Nissan', 'Mitsubishi', 'Hyundai', 'Kia', 'Volkswagen', 'Mazda', 'Renault', 'Otro'];
 const colores = ['Blanco', 'Negro', 'Gris', 'Rojo', 'Azul', 'Verde', 'Plateado', 'Beige', 'Amarillo', 'Naranja', 'Otro'];
 
 const generateMaterialId = (index: number) => `mat-new-${String(index).padStart(3, '0')}`;
@@ -55,17 +56,79 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
   const [blockingInspection, setBlockingInspection] = useState<Inspection | null>(null);
   const { user } = useAuth();
 
+  // Brand search state
+  const [brands, setBrands] = useState<DBVehicleBrand[]>([]);
+  const [brandSearch, setBrandSearch] = useState('');
+  const [showBrandDropdown, setShowBrandDropdown] = useState(false);
+  const [selectedBrandName, setSelectedBrandName] = useState('');
+  const brandRef = useRef<HTMLDivElement>(null);
+
   const {
     register,
     handleSubmit,
     reset,
+    setValue,
+    watch,
     formState: { errors },
   } = useForm<VehicleFormData>({
-    defaultValues: { fechaCreacion: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) },
+    defaultValues: {
+      fechaCreacion: new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+      cantidad_puestos: 5,
+      cantidad_ejes: 2,
+    },
   });
 
-  // Load the materials catalog (inventory) so the user can pick from what's available
-  // instead of typing material names manually.
+  const watchedMarca = watch('marca');
+
+  // Close brand dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (brandRef.current && !brandRef.current.contains(e.target as Node)) {
+        setShowBrandDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  // Load brands from Supabase (with Dexie fallback)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { createClient } = await import('@/lib/supabase/client');
+        const supabase = createClient();
+        const { data } = await supabase
+          .from('vehicle_brands')
+          .select('id, nombre, categoria, pais_origen, activo')
+          .eq('activo', true)
+          .order('nombre');
+        if (!cancelled && data && data.length > 0) {
+          setBrands(data as DBVehicleBrand[]);
+        }
+      } catch {
+        // fallback: use static list
+        if (!cancelled) {
+          setBrands([
+            { id: '1', nombre: 'Chevrolet', categoria: 'auto' },
+            { id: '2', nombre: 'Renault', categoria: 'auto' },
+            { id: '3', nombre: 'Kia', categoria: 'auto' },
+            { id: '4', nombre: 'Hyundai', categoria: 'auto' },
+            { id: '5', nombre: 'Toyota', categoria: 'auto' },
+            { id: '6', nombre: 'Mazda', categoria: 'auto' },
+            { id: '7', nombre: 'Nissan', categoria: 'auto' },
+            { id: '8', nombre: 'Ford', categoria: 'auto' },
+            { id: '9', nombre: 'Volkswagen', categoria: 'auto' },
+            { id: '10', nombre: 'Mitsubishi', categoria: 'auto' },
+            { id: '11', nombre: 'Otro', categoria: 'auto' },
+          ]);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Load materials catalog
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -77,8 +140,7 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
     return () => { cancelled = true; };
   }, []);
 
-  // When editing an existing vehicle, load its current data into the form.
-  // Without this, the form always renders blank even in edit mode.
+  // Load existing vehicle data for edit mode
   useEffect(() => {
     if (!vehicleId) {
       setLoadingVehicle(false);
@@ -101,7 +163,11 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
         vin: vehicle.vin || '',
         propietario: vehicle.propietario || '',
         fechaCreacion: vehicle.fecha_creacion || new Date().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+        cantidad_puestos: vehicle.cantidad_puestos ?? 5,
+        cantidad_ejes: vehicle.cantidad_ejes ?? 2,
       });
+      setSelectedBrandName(vehicle.marca || '');
+      setBrandSearch(vehicle.marca || '');
       const existing = Array.isArray(vehicle.materials) ? (vehicle.materials as MaterialRow[]) : [];
       setMaterials(
         existing.map((m, idx) => ({
@@ -119,6 +185,17 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
     return () => { cancelled = true; };
   }, [vehicleId, reset]);
 
+  const filteredBrands = brands.filter((b) =>
+    !brandSearch.trim() || b.nombre.toLowerCase().includes(brandSearch.toLowerCase())
+  );
+
+  const handleSelectBrand = (brand: DBVehicleBrand) => {
+    setValue('marca', brand.nombre, { shouldValidate: true });
+    setSelectedBrandName(brand.nombre);
+    setBrandSearch(brand.nombre);
+    setShowBrandDropdown(false);
+  };
+
   const addMaterial = () => {
     const newId = generateMaterialId(materials.length + 1 + Date.now() % 1000);
     setMaterials((prev) => [...prev, { id: newId, nombre: '', cantidad: '1', unidad: '', fotos: [] }]);
@@ -133,18 +210,12 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
     setMaterials((prev) => prev.map((m) => m.id === id ? { ...m, [field]: value } : m));
   };
 
-  // Selecting a catalog item auto-fills nombre + unidad; only cantidad stays editable.
   const handleSelectCatalogMaterial = (matRowId: string, catalogId: string) => {
     const catalogItem = catalogMaterials.find((c) => c.id === catalogId);
     setMaterials((prev) =>
       prev.map((m) =>
         m.id === matRowId
-          ? {
-            ...m,
-            material_id: catalogId || undefined,
-            nombre: catalogItem?.nombre || '',
-            unidad: catalogItem?.unidad || '',
-          }
+          ? { ...m, material_id: catalogId || undefined, nombre: catalogItem?.nombre || '', unidad: catalogItem?.unidad || '' }
           : m
       )
     );
@@ -155,48 +226,43 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
       toast.error('No se puede actualizar: este vehículo tiene una inspección en curso.');
       return;
     }
-    // Materials are optional; drop any row where no catalog material was selected.
     const validMaterials = materials.filter((m) => m.material_id && m.nombre.trim() !== '');
 
-    // Require at least brand+model AND (plate OR VIN)
     if (!data.placa && !data.vin) {
       toast.error('Se requiere al menos Placa o VIN para registrar el vehículo');
+      return;
+    }
+    if (!data.marca) {
+      toast.error('Selecciona la marca del vehículo');
       return;
     }
 
     setSaving(true);
     try {
-      // Write to IndexedDB via VehiclesRepo
       const { VehiclesRepo } = await import('@/lib/repositories');
-      const { queryKeys } = await import('@/lib/queryClient');
-      const { getQueryClient } = await import('@/lib/queryClient');
+      const { queryKeys, getQueryClient } = await import('@/lib/queryClient');
+
+      const vehicleData = {
+        marca: data.marca,
+        modelo: data.modelo,
+        color: data.color,
+        placa: data.placa,
+        vin: data.vin,
+        propietario: data.propietario,
+        fecha_creacion: data.fechaCreacion,
+        cantidad_puestos: Number(data.cantidad_puestos),
+        cantidad_ejes: Number(data.cantidad_ejes),
+        materials: validMaterials as unknown[],
+      };
 
       if (vehicleId) {
-        await VehiclesRepo.update(vehicleId, {
-          marca: data.marca,
-          modelo: data.modelo,
-          color: data.color,
-          placa: data.placa,
-          vin: data.vin,
-          propietario: data.propietario,
-          fecha_creacion: data.fechaCreacion,
-          materials: validMaterials as unknown[],
-        });
+        await VehiclesRepo.update(vehicleId, vehicleData);
         toast.success('Vehículo actualizado correctamente');
       } else {
-        // NOTE: vehicles.id in Supabase is of type uuid — must use a valid UUID,
-        // not a custom string, or Supabase rejects insert/update/delete with 400.
         const id = crypto.randomUUID();
         await VehiclesRepo.create({
           id,
-          marca: data.marca,
-          modelo: data.modelo,
-          color: data.color,
-          placa: data.placa,
-          vin: data.vin,
-          propietario: data.propietario,
-          fecha_creacion: data.fechaCreacion,
-          materials: validMaterials as unknown[],
+          ...vehicleData,
           created_by: user?.id,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -207,7 +273,6 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
           toast.success('Vehículo registrado en producción');
         }
       }
-      // Invalidate TanStack Query cache
       getQueryClient().invalidateQueries({ queryKey: queryKeys.vehicles.all });
       onClose();
     } catch {
@@ -254,24 +319,57 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
                 Datos del Vehículo
               </h3>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="form-label">Marca *</label>
-                  <select {...register('marca', { required: 'Requerido' })} className="form-select">
-                    <option value="">Seleccionar</option>
-                    {marcas.map((m) => <option key={`prod-marca-${m}`} value={m}>{m}</option>)}
-                  </select>
-                  {errors.marca && <p className="text-xs text-red-500 mt-1">{errors.marca.message}</p>}
-                </div>
-                <div>
-                  <label className="form-label">Modelo *</label>
-                  <input
-                    {...register('modelo', { required: 'Requerido' })}
-                    placeholder="Ej: Hilux 4x4"
-                    className="form-input"
-                  />
-                  {errors.modelo && <p className="text-xs text-red-500 mt-1">{errors.modelo.message}</p>}
-                </div>
+              {/* Brand search with autocomplete */}
+              <div ref={brandRef} className="relative">
+                <label className="form-label">Marca *</label>
+                <input
+                  type="text"
+                  value={brandSearch}
+                  onChange={(e) => {
+                    setBrandSearch(e.target.value);
+                    setValue('marca', e.target.value, { shouldValidate: true });
+                    setSelectedBrandName(e.target.value);
+                    setShowBrandDropdown(true);
+                  }}
+                  onFocus={() => setShowBrandDropdown(true)}
+                  placeholder="Buscar marca..."
+                  className="form-input"
+                  autoComplete="off"
+                />
+                {/* Hidden input for react-hook-form */}
+                <input type="hidden" {...register('marca', { required: 'Requerido' })} />
+                {errors.marca && <p className="text-xs text-red-500 mt-1">{errors.marca.message}</p>}
+                {showBrandDropdown && filteredBrands.length > 0 && (
+                  <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-xl shadow-lg mt-1 max-h-48 overflow-y-auto">
+                    {filteredBrands.slice(0, 30).map((b) => (
+                      <button
+                        key={b.id}
+                        type="button"
+                        onClick={() => handleSelectBrand(b)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-blue-50 text-sm flex items-center justify-between border-b border-gray-50 last:border-0"
+                      >
+                        <span className="font-medium text-gray-800">{b.nombre}</span>
+                        <span className="text-xs text-gray-400 capitalize">{b.categoria}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {selectedBrandName && (
+                  <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                    <Icon name="CheckCircleIcon" size={12} className="text-green-500" />
+                    Marca seleccionada: {selectedBrandName}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="form-label">Modelo *</label>
+                <input
+                  {...register('modelo', { required: 'Requerido' })}
+                  placeholder="Ej: Hilux 4x4"
+                  className="form-input"
+                />
+                {errors.modelo && <p className="text-xs text-red-500 mt-1">{errors.modelo.message}</p>}
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -316,6 +414,61 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
                 {errors.propietario && <p className="text-xs text-red-500 mt-1">{errors.propietario.message}</p>}
               </div>
 
+              {/* Seats and axles — required fields */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="form-label">Cantidad de Puestos *</label>
+                  <p className="text-xs text-gray-400 mb-1">Número de pasajeros (incluye conductor)</p>
+                  <input
+                    type="number"
+                    min={1}
+                    max={120}
+                    {...register('cantidad_puestos', {
+                      required: 'Requerido',
+                      min: { value: 1, message: 'Mínimo 1' },
+                      max: { value: 120, message: 'Máximo 120' },
+                      valueAsNumber: true,
+                    })}
+                    className="form-input"
+                  />
+                  {errors.cantidad_puestos && <p className="text-xs text-red-500 mt-1">{errors.cantidad_puestos.message}</p>}
+                </div>
+                <div>
+                  <label className="form-label">Cantidad de Ejes *</label>
+                  <p className="text-xs text-gray-400 mb-1">Número de ejes del vehículo</p>
+                  <input
+                    type="number"
+                    min={2}
+                    max={10}
+                    {...register('cantidad_ejes', {
+                      required: 'Requerido',
+                      min: { value: 2, message: 'Mínimo 2' },
+                      max: { value: 10, message: 'Máximo 10' },
+                      valueAsNumber: true,
+                    })}
+                    className="form-input"
+                  />
+                  {errors.cantidad_ejes && <p className="text-xs text-red-500 mt-1">{errors.cantidad_ejes.message}</p>}
+                </div>
+              </div>
+
+              {/* Diagram preview hint */}
+              {watch('cantidad_puestos') && watch('cantidad_ejes') && (
+                <div className="bg-blue-50 border border-blue-100 rounded-xl p-3 flex items-center gap-2">
+                  <Icon name="InformationCircleIcon" size={16} className="text-blue-500 flex-shrink-0" />
+                  <p className="text-xs text-blue-700">
+                    {(() => {
+                      const { getInspectionDiagramConfig } = require('@/lib/inspectionDiagram');
+                      const cfg = getInspectionDiagramConfig(
+                        Number(watch('cantidad_puestos')),
+                        Number(watch('cantidad_ejes'))
+                      );
+                      return `Tipo: ${cfg.vehicleType} · ${cfg.tireCount} neumáticos · ${cfg.axleCount} ejes`;
+                    })()}
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="form-label">Fecha de Creación</label>
                 <input {...register('fechaCreacion')} className="form-input" />
@@ -329,8 +482,8 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
                   <Icon name="CubeIcon" size={18} className="text-[#1B4F72]" />
                   Materiales Utilizados
                   <span className="text-xs bg-blue-100 text-blue-600 rounded-full px-2 py-0.5 font-semibold">
-                  {materials.length}
-                </span>
+                    {materials.length}
+                  </span>
                 </h3>
                 <button
                   type="button"
@@ -345,7 +498,7 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
               {!loadingCatalog && catalogMaterials.length === 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3">
                   <p className="text-xs text-amber-700 font-semibold">
-                    No hay materiales en el catálogo todavía. Agrégalos primero en la sección "Materiales" para poder seleccionarlos aquí.
+                    No hay materiales en el catálogo todavía. Agrégalos primero en la sección &quot;Materiales&quot;.
                   </p>
                 </div>
               )}
@@ -363,7 +516,6 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
               <div className="space-y-3">
                 {materials.map((mat, idx) => (
                   <div key={mat.id} className="border border-gray-100 rounded-xl overflow-hidden bg-gray-50">
-                    {/* Material header */}
                     <div
                       className="flex items-center gap-3 p-3 cursor-pointer"
                       onClick={() => setExpandedMat(expandedMat === mat.id ? null : mat.id)}
@@ -444,7 +596,6 @@ export default function VehicleProductionForm({ vehicleId, onClose }: VehiclePro
               </div>
             </div>
 
-            {/* Bottom spacer */}
             <div className="h-4" />
           </fieldset>
         </form>

@@ -2,7 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
 // Public routes that don't require authentication
-const PUBLIC_ROUTES = ['/login', '/auth/callback', '/reset-password'];
+const PUBLIC_ROUTES = ['/login', '/auth/callback', '/reset-password', '/forgot-password'];
 
 // Admin-only routes (inspectors are redirected away)
 const ADMIN_ROUTES = ['/users-management', '/materials-management', '/vehicle-production'];

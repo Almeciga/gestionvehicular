@@ -18,7 +18,10 @@ export async function GET(request: NextRequest) {
       }
       return NextResponse.redirect(`${origin}${next}`);
     }
+    // Code exchange failed (expired or already used)
+    return NextResponse.redirect(`${origin}/reset-password?error=link_expired`);
   }
 
+  // No code — redirect to login
   return NextResponse.redirect(`${origin}/login`);
 }

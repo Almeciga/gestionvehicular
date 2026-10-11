@@ -21,6 +21,8 @@ export interface DBVehicle {
   vin?: string;
   propietario: string;
   fecha_creacion?: string;
+  cantidad_puestos?: number;
+  cantidad_ejes?: number;
   materials?: unknown[];
   created_by?: string;
   created_at: string;
@@ -160,6 +162,65 @@ export interface DBPOPiezaVidrio {
   [key: string]: unknown;
 }
 
+export interface DBVehicleBrand {
+  id: string;
+  nombre: string;
+  categoria: string;
+  pais_origen?: string;
+  activo?: boolean;
+  created_at?: string;
+}
+
+export interface DBVehicleDocument {
+  id: string;
+  vehicle_id: string;
+  tipo: 'soat' | 'tecno' | 'seguro_todo_riesgo' | 'tarjeta_propiedad' | 'licencia_conduccion' | 'tarjeta_transito';
+  estado: 'pendiente' | 'cargado' | 'vencido' | 'por_vencer';
+  fecha_vencimiento?: string;
+  archivo_url?: string;
+  archivo_mime?: string;
+  notas?: string;
+  uploaded_by?: string;
+  created_at: string;
+  updated_at: string;
+  _synced_at?: number;
+  _dirty?: boolean;
+}
+
+export interface DBTrabajo {
+  id: string;
+  vehicle_id: string;
+  descripcion: string;
+  parte_vehiculo?: string;
+  fecha_inicio: string;
+  fecha_fin?: string;
+  estado: 'pendiente' | 'en_ejecucion' | 'finalizado';
+  responsable?: string;
+  observaciones?: string;
+  materiales?: unknown[];
+  herramientas?: unknown[];
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+  _synced_at?: number;
+  _dirty?: boolean;
+}
+
+export interface DBHerramienta {
+  id: string;
+  nombre: string;
+  categoria: string;
+  estado: 'disponible' | 'en_uso' | 'mantenimiento' | 'baja';
+  descripcion?: string;
+  codigo?: string;
+  activo?: boolean;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+  _synced_at?: number;
+  _dirty?: boolean;
+}
+
 // ─── Dexie Database (browser-only) ───────────────────────────────────────────
 // IMPORTANT: Dexie uses IndexedDB which is a browser-only API.
 // The class definition and instantiation MUST NOT run on the server.
@@ -191,6 +252,10 @@ export interface GVDatabaseType {
   sync_queue: MinimalTable<DBSyncQueueItem, number>;
   sync_meta: MinimalTable<DBSyncMeta, string>;
   error_logs: MinimalTable<DBErrorLog, string>;
+  vehicle_brands: MinimalTable<DBVehicleBrand, string>;
+  vehicle_documents: MinimalTable<DBVehicleDocument, string>;
+  trabajos: MinimalTable<DBTrabajo, string>;
+  herramientas: MinimalTable<DBHerramienta, string>;
 }
 
 // Singleton instance — only created in browser
@@ -243,6 +308,10 @@ export function getDB(): GVDatabaseType {
       sync_queue: noopTable,
       sync_meta: noopTable,
       error_logs: noopTable,
+      vehicle_brands: noopTable,
+      vehicle_documents: noopTable,
+      trabajos: noopTable,
+      herramientas: noopTable,
     };
   }
 
@@ -260,6 +329,10 @@ export function getDB(): GVDatabaseType {
       sync_queue!: any;
       sync_meta!: any;
       error_logs!: any;
+      vehicle_brands!: any;
+      vehicle_documents!: any;
+      trabajos!: any;
+      herramientas!: any;
 
       constructor() {
         super('gv_enterprise_db');
@@ -302,6 +375,20 @@ export function getDB(): GVDatabaseType {
                 if (insp.base_version === undefined) insp.base_version = insp.version;
               });
           });
+
+        this.version(4).stores({
+          profiles: 'id, email, role, is_active, updated_at',
+          vehicles: 'id, placa, marca, propietario, created_by, updated_at, _dirty',
+          materials: 'id, nombre, categoria, updated_at, _dirty',
+          inspections: 'id, placa, inspector_id, status, updated_at, local_id, _dirty, sync_status',
+          sync_queue: '++id, table_name, operation, record_id, status, created_at',
+          sync_meta: 'id',
+          error_logs: 'id, level, created_at, context',
+          vehicle_brands: 'id, nombre, categoria, activo',
+          vehicle_documents: 'id, vehicle_id, tipo, estado, updated_at, _dirty',
+          trabajos: 'id, vehicle_id, estado, updated_at, _dirty',
+          herramientas: 'id, nombre, categoria, estado, updated_at, _dirty',
+        });
       }
     }
 
