@@ -91,6 +91,18 @@ const P = {
 
 // ─── Shared SUV side body — used by both left and right views ─────────────────
 // Defined once in <defs>, referenced via <use> with mirror transform for right view.
+//
+// KEY GEOMETRY (viewBox 1000×400):
+// Ground y=375, wheel center y=298, wheel radius=77
+// Front axle x=215, rear axle x=755
+// Body bottom y=295
+// Hood: x=30..260 (230px = 24.5% of 940px — SUV proportion)
+// Windshield base x=260 y=185, top x=370 y=75 (steep 55° angle)
+// Roof: x=370..840 y=75 (flat with slight curve) — cabin width = 470px
+// Rear window: x=840 y=75 down to x=930 y=185
+// Rear hatch: x=930..970 y=185..295
+// Cabin height: 185−75=110px. Lower body: 295−185=110px. Ratio=50% ✓ (SUV)
+// Hood length: 230px / 940px = 24.5% ✓ (SUV reference ~25%)
 
 function SuvSideBodyDefs() {
   return (
@@ -99,48 +111,49 @@ function SuvSideBodyDefs() {
         {/* ── GROUND LINE ── */}
         <line x1="30" y1="375" x2="970" y2="375" stroke={P.detail} strokeWidth="1" strokeDasharray="5,7" />
 
-        {/* ── MAIN BODY SILHOUETTE ── complex path for realistic SUV shape */}
-        {/* Lower body: x=30..970, y=295 (bottom edge) */}
-        {/* Hood: slopes from front bumper up to windshield base */}
-        {/* Cabin: windshield, roof, rear window */}
-        {/* Rear: hatch and bumper */}
+        {/* ── MAIN BODY SILHOUETTE ── realistic SUV proportions */}
+        {/* Hood: x=30..260 (24.5% of body length — compact SUV) */}
+        {/* Windshield: steep slope from x=260 y=185 to x=370 y=75 */}
+        {/* Roof: x=370..840 y=75 (flat top with slight curvature) */}
+        {/* Rear window: x=840..930 y=75..185 (steeper C-pillar) */}
+        {/* Rear hatch: x=930..970 y=185..295 */}
         <path
           d={[
-            // Start at front bumper bottom-left
+            // Front bumper bottom-left
             'M 30 295',
-            // Front bumper face (vertical)
-            'L 30 260',
-            // Front bumper top curves into hood
-            'Q 35 255 50 252',
-            // Hood rises from front to windshield base
-            'L 80 248',
-            'Q 160 235 260 210',
-            'Q 310 198 340 185',
-            // Windshield (A-pillar slope)
-            'Q 370 155 400 110',
-            'Q 430 75 460 55',
-            // Roof (nearly flat with slight forward slope)
-            'Q 550 48 660 48',
-            'Q 760 48 860 55',
-            // Rear window (C-pillar slope)
-            'Q 900 80 930 130',
-            'Q 950 165 955 185',
+            // Front bumper face
+            'L 30 268',
+            // Front bumper top into hood leading edge
+            'Q 35 260 52 256',
+            // Hood rises — short and flat (SUV style)
+            'L 90 250',
+            'Q 170 238 230 220',
+            'Q 248 212 260 185',
+            // Windshield — steep A-pillar (SUV angle ~60°)
+            'Q 290 148 320 112',
+            'Q 348 85 370 75',
+            // Roof — nearly flat, slight forward rake
+            'Q 480 68 600 67',
+            'Q 720 67 840 75',
+            // Rear window — C-pillar steeper than A-pillar
+            'Q 872 95 898 128',
+            'Q 918 158 928 185',
             // Rear hatch top
-            'L 965 185',
-            // Rear hatch face
-            'L 970 210',
-            'L 970 260',
+            'L 940 185',
+            // Rear hatch face (near vertical)
+            'L 948 210',
+            'L 952 260',
             // Rear bumper
-            'Q 968 270 960 275',
-            'L 960 295',
+            'Q 950 272 942 278',
+            'L 942 295',
             // Body bottom — skip wheel arch areas
             // Rear wheel arch
-            'L 840 295',
-            'A 90 90 0 0 0 665 295',
-            // Between arches (rocker panel)
-            'L 300 295',
+            'L 832 295',
+            'A 77 77 0 0 0 678 295',
+            // Rocker panel between arches
+            'L 292 295',
             // Front wheel arch
-            'A 90 90 0 0 0 125 295',
+            'A 77 77 0 0 0 138 295',
             // Return to front bumper
             'L 30 295',
             'Z',
@@ -151,44 +164,49 @@ function SuvSideBodyDefs() {
           strokeLinejoin="round"
         />
 
-        {/* ── HOOD PANEL LINE ── crease line on hood */}
+        {/* ── HOOD PANEL LINE ── crease line on short SUV hood */}
         <path
-          d="M 55 252 Q 200 228 340 185"
+          d="M 55 256 Q 160 238 260 185"
           fill="none"
           stroke={P.detail}
           strokeWidth="1"
           strokeDasharray="6,4"
         />
 
-        {/* ── WINDSHIELD ── */}
+        {/* ── WINDSHIELD ── steep SUV angle */}
         <path
-          d="M 340 185 Q 370 155 400 110 Q 430 75 460 55 L 540 55 L 540 185 Z"
+          d="M 260 185 Q 290 148 320 112 Q 348 85 370 75 L 450 75 L 450 185 Z"
           fill={P.glass}
           stroke={P.glassStroke}
           strokeWidth="1.5"
         />
         {/* A-pillar */}
         <path
-          d="M 340 185 Q 370 155 400 110 Q 430 75 460 55"
+          d="M 260 185 Q 290 148 320 112 Q 348 85 370 75"
           fill="none"
           stroke={P.pillar}
           strokeWidth="4"
           strokeLinecap="round"
         />
 
-        {/* ── ROOF PANEL ── */}
-        <rect x="460" y="48" width="400" height="10" rx="3" fill={P.bodyDark} stroke={P.bodyStroke} strokeWidth="1" />
+        {/* ── ROOF PANEL ── with slight curvature */}
+        <path
+          d="M 370 75 Q 600 67 840 75 L 840 82 Q 600 74 370 82 Z"
+          fill={P.bodyDark}
+          stroke={P.bodyStroke}
+          strokeWidth="1"
+        />
 
         {/* ── REAR WINDOW ── */}
         <path
-          d="M 860 55 Q 900 80 930 130 Q 950 165 955 185 L 860 185 Z"
+          d="M 840 75 Q 872 95 898 128 Q 918 158 928 185 L 840 185 Z"
           fill={P.glass}
           stroke={P.glassStroke}
           strokeWidth="1.5"
         />
         {/* C-pillar */}
         <path
-          d="M 860 55 Q 900 80 930 130 Q 950 165 955 185"
+          d="M 840 75 Q 872 95 898 128 Q 918 158 928 185"
           fill="none"
           stroke={P.pillar}
           strokeWidth="4"
@@ -196,50 +214,50 @@ function SuvSideBodyDefs() {
         />
 
         {/* ── BELTLINE (waistline) ── */}
-        <line x1="340" y1="185" x2="955" y2="185" stroke={P.detail} strokeWidth="1.5" strokeDasharray="8,5" />
+        <line x1="260" y1="185" x2="928" y2="185" stroke={P.detail} strokeWidth="1.5" strokeDasharray="8,5" />
 
-        {/* ── FRONT DOOR ── x=340..555, y=185..295 */}
-        <rect x="340" y="185" width="215" height="110" fill="none" stroke={P.detail} strokeWidth="1.5" />
-        {/* Front door window */}
+        {/* ── FRONT DOOR ── x=260..490, y=185..295 (230px wide) */}
+        <rect x="260" y="185" width="230" height="110" fill="none" stroke={P.detail} strokeWidth="1.5" />
+        {/* Front door window — trapezoidal automotive shape */}
         <path
-          d="M 348 193 L 348 178 Q 350 172 360 168 L 540 168 L 540 193 Z"
+          d="M 268 193 L 268 178 Q 272 170 285 166 L 480 166 L 480 193 Z"
           fill={P.glass}
           stroke={P.glassStroke}
           strokeWidth="1"
         />
         {/* Front door handle */}
-        <rect x="500" y="248" width="32" height="8" rx="4" fill={P.detail} stroke={P.chassis} strokeWidth="1" />
-        <circle cx="530" cy="252" r="4" fill={P.chassis} />
+        <rect x="430" y="248" width="36" height="8" rx="4" fill={P.detail} stroke={P.chassis} strokeWidth="1" />
+        <circle cx="464" cy="252" r="4" fill={P.chassis} />
 
-        {/* ── REAR DOOR ── x=555..775, y=185..295 */}
-        <rect x="555" y="185" width="220" height="110" fill="none" stroke={P.detail} strokeWidth="1.5" />
-        {/* Rear door window */}
-        <rect x="563" y="193" width="204" height="75" rx="4" fill={P.glass} stroke={P.glassStroke} strokeWidth="1" />
+        {/* ── REAR DOOR ── x=490..720, y=185..295 (230px wide) */}
+        <rect x="490" y="185" width="230" height="110" fill="none" stroke={P.detail} strokeWidth="1.5" />
+        {/* Rear door window — rectangular with rounded corners */}
+        <rect x="498" y="193" width="214" height="75" rx="5" fill={P.glass} stroke={P.glassStroke} strokeWidth="1" />
         {/* Rear door handle */}
-        <rect x="720" y="248" width="32" height="8" rx="4" fill={P.detail} stroke={P.chassis} strokeWidth="1" />
-        <circle cx="750" cy="252" r="4" fill={P.chassis} />
+        <rect x="660" y="248" width="36" height="8" rx="4" fill={P.detail} stroke={P.chassis} strokeWidth="1" />
+        <circle cx="694" cy="252" r="4" fill={P.chassis} />
 
         {/* ── B-PILLAR ── */}
-        <rect x="552" y="185" width="6" height="110" fill={P.pillar} />
+        <rect x="487" y="185" width="6" height="110" fill={P.pillar} />
 
-        {/* ── REAR QUARTER PANEL ── x=775..955, y=185..295 */}
-        <rect x="775" y="185" width="180" height="110" fill="none" stroke={P.detail} strokeWidth="1" />
+        {/* ── REAR QUARTER PANEL ── x=720..928, y=185..295 */}
+        <rect x="720" y="185" width="208" height="110" fill="none" stroke={P.detail} strokeWidth="1" />
         {/* Small quarter window */}
         <path
-          d="M 783 193 L 783 178 Q 785 172 795 168 L 855 168 L 855 193 Z"
+          d="M 728 193 L 728 178 Q 730 170 742 166 L 830 166 L 830 193 Z"
           fill={P.glass}
           stroke={P.glassStroke}
           strokeWidth="1"
         />
 
         {/* ── ROCKER PANEL (estribo) ── */}
-        <rect x="340" y="288" width="435" height="10" rx="3" fill={P.rocker} stroke={P.bodyStroke} strokeWidth="1" />
+        <rect x="260" y="288" width="460" height="10" rx="3" fill={P.rocker} stroke={P.bodyStroke} strokeWidth="1" />
 
-        {/* ── WHEEL ARCHES ── semi-circles r=90 at y=295 */}
+        {/* ── WHEEL ARCHES ── semi-circles r=77 at y=295 */}
         {/* Front arch: center (215, 295) */}
-        <path d="M 125 295 A 90 90 0 0 1 305 295" fill={P.bg} stroke={P.bodyStroke} strokeWidth="2.5" />
+        <path d="M 138 295 A 77 77 0 0 1 292 295" fill={P.bg} stroke={P.bodyStroke} strokeWidth="2.5" />
         {/* Rear arch: center (755, 295) */}
-        <path d="M 665 295 A 90 90 0 0 1 845 295" fill={P.bg} stroke={P.bodyStroke} strokeWidth="2.5" />
+        <path d="M 678 295 A 77 77 0 0 1 832 295" fill={P.bg} stroke={P.bodyStroke} strokeWidth="2.5" />
 
         {/* ── FRONT WHEEL ── cx=215, cy=298, r=77 */}
         <circle cx="215" cy="298" r="77" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
@@ -280,39 +298,39 @@ function SuvSideBodyDefs() {
 
         {/* ── SIDE MIRROR ── near A-pillar */}
         <path
-          d="M 308 172 L 340 168 L 340 185 L 308 185 Z"
+          d="M 228 168 L 260 164 L 260 185 L 228 185 Z"
           fill={P.mirror}
           stroke={P.bodyStroke}
           strokeWidth="1.5"
         />
-        <rect x="300" y="175" width="10" height="8" rx="2" fill={P.chassis} />
+        <rect x="220" y="172" width="10" height="8" rx="2" fill={P.chassis} />
 
         {/* ── FRONT HEADLIGHT ── */}
         <path
-          d="M 32 252 L 32 295 L 80 295 L 80 252 Q 60 248 32 252 Z"
+          d="M 32 256 L 32 295 L 88 295 L 88 256 Q 65 250 32 256 Z"
           fill={P.headlight}
           stroke={P.headlightS}
           strokeWidth="1.5"
         />
         {/* DRL strip */}
-        <line x1="36" y1="260" x2="76" y2="258" stroke={P.headlightS} strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="38" y1="264" x2="82" y2="262" stroke={P.headlightS} strokeWidth="2.5" strokeLinecap="round" />
         {/* Low beam */}
-        <ellipse cx="55" cy="278" rx="18" ry="12" fill={P.headlight} stroke={P.headlightS} strokeWidth="1" />
+        <ellipse cx="58" cy="280" rx="18" ry="12" fill={P.headlight} stroke={P.headlightS} strokeWidth="1" />
 
         {/* ── REAR TAIL LIGHT ── */}
         <path
-          d="M 955 185 L 970 210 L 970 295 L 940 295 L 940 185 Z"
+          d="M 928 185 L 948 210 L 952 295 L 918 295 L 918 185 Z"
           fill={P.taillight}
           stroke={P.taillightS}
           strokeWidth="1.5"
         />
         {/* LED strip */}
-        <line x1="944" y1="195" x2="966" y2="215" stroke={P.taillightS} strokeWidth="3" strokeLinecap="round" />
-        <line x1="944" y1="210" x2="966" y2="230" stroke={P.taillightS} strokeWidth="2" strokeLinecap="round" />
+        <line x1="922" y1="195" x2="944" y2="218" stroke={P.taillightS} strokeWidth="3" strokeLinecap="round" />
+        <line x1="922" y1="210" x2="944" y2="233" stroke={P.taillightS} strokeWidth="2" strokeLinecap="round" />
 
         {/* ── FRONT BUMPER LOWER DETAIL ── */}
         <path
-          d="M 30 275 Q 35 270 55 268 L 125 268 L 125 280 L 55 280 Q 35 280 30 275 Z"
+          d="M 30 272 Q 36 266 58 264 L 138 264 L 138 278 L 58 278 Q 36 278 30 272 Z"
           fill={P.bodyDark}
           stroke={P.bodyStroke}
           strokeWidth="1"
@@ -320,7 +338,7 @@ function SuvSideBodyDefs() {
 
         {/* ── REAR BUMPER LOWER DETAIL ── */}
         <path
-          d="M 970 275 Q 965 270 945 268 L 875 268 L 875 280 L 945 280 Q 965 280 970 275 Z"
+          d="M 952 272 Q 946 266 926 264 L 846 264 L 846 278 L 926 278 Q 946 278 952 272 Z"
           fill={P.bodyDark}
           stroke={P.bodyStroke}
           strokeWidth="1"
@@ -328,7 +346,7 @@ function SuvSideBodyDefs() {
 
         {/* ── BODY CREASE LINE ── character line along lower body */}
         <path
-          d="M 80 260 Q 300 255 500 252 Q 700 250 870 255 Q 920 258 955 265"
+          d="M 88 264 Q 300 258 500 255 Q 700 253 870 258 Q 910 261 942 268"
           fill="none"
           stroke={P.detail}
           strokeWidth="1.5"
@@ -674,7 +692,7 @@ function BottomViewSVG() {
 }
 
 // ─── FrontViewSVG ─────────────────────────────────────────────────────────────
-// viewBox 440×420. Body x=30..410 (380 px), ground y=390, roof y=25.
+// viewBox 440×400. Body x=30..410 (380 px), ground y=390, roof y=25.
 // Cabin x=70..370 (300 px). Center x=220.
 // Wheel rects: 50 px wide × 150 px tall.
 //   Left wheel:  x=25..75,  y=240..390
@@ -685,7 +703,7 @@ function BottomViewSVG() {
 
 function FrontViewSVG() {
   return (
-    <svg viewBox="0 0 440 420" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+    <svg viewBox="0 0 440 400" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
 
       {/* ── MAIN BODY SILHOUETTE ── */}
       <path
@@ -817,13 +835,13 @@ function FrontViewSVG() {
 }
 
 // ─── RearViewSVG ──────────────────────────────────────────────────────────────
-// viewBox 440×420. Same proportions as front view.
+// viewBox 440×400. Same proportions as front view.
 // Rear window instead of windshield. Tail lights instead of headlights.
 // License plate, exhaust pipes, rear bumper.
 
 function RearViewSVG() {
   return (
-    <svg viewBox="0 0 440 420" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
+    <svg viewBox="0 0 440 400" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
 
       {/* ── MAIN BODY SILHOUETTE ── same as front */}
       <path
@@ -957,47 +975,20 @@ function RearViewSVG() {
 //   Body x=30..970 → x%: 3..97
 //   Beltline y=185 → y%: 185/400=46.25 ≈ 46
 //   Body bottom y=295 → y%: 295/400=73.75 ≈ 74
-//   Hood x=30..340 → x%: 3..34 (w=31)
-//   Front door x=340..555 → x%: 34..55.5 (w=21.5 ≈ 22)
-//   Rear door x=555..775 → x%: 55.5..77.5 (w=22)
-//   Rear hatch x=775..970 → x%: 77.5..97 (w=19.5 ≈ 20)
-//   Roof y=55..185 → y%: 13.75..46.25 (h=32.5 ≈ 33)
+//   Hood x=30..260 → x%: 3..26 (w=23) — shorter SUV hood
+//   Front door x=260..490 → x%: 26..49 (w=23)
+//   Rear door x=490..720 → x%: 49..72 (w=23)
+//   Rear hatch x=720..970 → x%: 72..97 (w=25)
+//   Roof y=75..185 → y%: 18.75..46.25 (h=27.5 ≈ 28)
 //   Estribo y=288..298 → y%: 72..74.5 (h=2.5) — use y=70, h=8 for clickability
 //
-// SUPERIOR (viewBox 1000×420):
-//   Body x=30..970, y=65..355
-//   Hood x=30..340 → x%: 3..34 (w=31)
-//   Windshield x=340..460 → x%: 34..46 (w=12)
-//   Roof x=460..860 → x%: 46..86 (w=40)
-//   Rear window x=860..960 → x%: 86..96 (w=10)
-//   Trunk x=960..970 → x%: 96..97 (w=1) — merge with maletero
-//   Left side y=65..355 → y%: 15.5..84.5
-//   Front door x=340..555 → x%: 34..55.5 (w=21.5 ≈ 22)
-//   Rear door x=555..775 → x%: 55.5..77.5 (w=22)
-//   Parachoques del x=30..145 → x%: 3..14.5 (w=11.5 ≈ 12)
-//   Parachoques tra x=855..970 → x%: 85.5..97 (w=11.5 ≈ 12)
-//
-// FRONTAL (viewBox 440×420):
-//   Body x=25..415, y=25..390
-//   Windshield y=25..210 → y%: 5.95..50 (h=44)
-//   Hood y=210..270 → y%: 50..64.3 (h=14.3 ≈ 14)
-//   Headlights x=28..78 and x=362..412, y=210..270 → x%: 6.4..17.7 and 82.3..93.6
-//   Grille y=270..330 → y%: 64.3..78.6 (h=14.3 ≈ 14)
-//   Bumper y=330..390 → y%: 78.6..92.9 (h=14.3 ≈ 14)
-//   Guardabarro izq x=25..75 → x%: 5.7..17 (w=11.4 ≈ 11)
-//   Guardabarro der x=365..415 → x%: 83..94.3 (w=11.4 ≈ 11)
-//
-// TRASERA (viewBox 440×420): same proportions as frontal
-//
-// INFERIOR (viewBox 1000×420):
-//   Motor x=65..370, y=118..196 → x%: 6.5..37 (w=30.5 ≈ 31), y%: 28..46.7 (h=18.7 ≈ 19)
-//   Transmision x=370..540, y=140..214 → x%: 37..54 (w=17), y%: 33.3..51 (h=17.7 ≈ 18)
-//   Tanque x=570..800, y=214..318 → x%: 57..80 (w=23), y%: 51..75.7 (h=24.7 ≈ 25)
-//   Escape izq y≈128 → band x%: 10..90, y%: 28..35
-//   Escape der y≈282 → band x%: 10..90, y%: 62..70
-//   Dif del cx=215, cy=205 → x%: 14.5..24.5 (w=10), y%: 42..52 (h=10)
-//   Dif tra cx=755, cy=205 → x%: 68.5..78.5 (w=10), y%: 42..52 (h=10)
-//   Piso: full underbody x%: 3..97, y%: 5..95
+// LATERAL HOTSPOT MIRROR: lde-x = 100 − liz-x − liz-w
+//   liz-capo:     x=3,  w=30 → lde-capo:     x=67 (100−3−30=67)
+//   liz-puerta-d: x=33, w=21 → lde-puerta-d: x=46 (100−33−21=46)
+//   liz-puerta-t: x=54, w=22 → lde-puerta-t: x=24 (100−54−22=24)
+//   liz-maletero: x=76, w=21 → lde-maletero: x=3  (100−76−21=3)
+//   liz-techo:    x=33, w=54 → lde-techo:    x=13 (100−33−54=13)
+//   liz-estribo:  x=33, w=43 → lde-estribo:  x=24 (100−33−43=24)
 
 interface ZoneHotspot {
   id: string;
@@ -1011,65 +1002,67 @@ interface ZoneHotspot {
 
 const ZONE_HOTSPOTS: ZoneHotspot[] = [
   // ── Superior view (viewBox 1000×420) ──────────────────────────────────────
-  { id: 'sup-capo',      nombre: 'Capó',               x: 3,  y: 5,  w: 31, h: 90, view: 'superior' },
-  { id: 'sup-techo',     nombre: 'Techo',               x: 46, y: 5,  w: 40, h: 90, view: 'superior' },
-  { id: 'sup-maletero',  nombre: 'Maletero',            x: 86, y: 5,  w: 11, h: 90, view: 'superior' },
-  { id: 'sup-puerta-di', nombre: 'Puerta Del. Izq.',    x: 34, y: 5,  w: 22, h: 11, view: 'superior' },
-  { id: 'sup-puerta-dd', nombre: 'Puerta Del. Der.',    x: 34, y: 84, w: 22, h: 11, view: 'superior' },
-  { id: 'sup-puerta-ti', nombre: 'Puerta Tra. Izq.',    x: 56, y: 5,  w: 22, h: 11, view: 'superior' },
-  { id: 'sup-puerta-td', nombre: 'Puerta Tra. Der.',    x: 56, y: 84, w: 22, h: 11, view: 'superior' },
-  { id: 'sup-para-del',  nombre: 'Parachoques Del.',    x: 3,  y: 5,  w: 12, h: 90, view: 'superior' },
-  { id: 'sup-para-tra',  nombre: 'Parachoques Tra.',    x: 85, y: 5,  w: 12, h: 90, view: 'superior' },
+  { id: 'sup-capo',      nombre: 'Capó',               x: 3,  y: 5,  w: 30, h: 90, view: 'superior' },
+  { id: 'sup-techo',     nombre: 'Techo',               x: 45, y: 5,  w: 42, h: 90, view: 'superior' },
+  { id: 'sup-maletero',  nombre: 'Maletero',            x: 87, y: 5,  w: 10, h: 90, view: 'superior' },
+  { id: 'sup-puerta-di', nombre: 'Puerta Del. Izq.',    x: 33, y: 5,  w: 21, h: 11, view: 'superior' },
+  { id: 'sup-puerta-dd', nombre: 'Puerta Del. Der.',    x: 33, y: 85, w: 21, h: 11, view: 'superior' },
+  { id: 'sup-puerta-ti', nombre: 'Puerta Tra. Izq.',    x: 54, y: 5,  w: 22, h: 11, view: 'superior' },
+  { id: 'sup-puerta-td', nombre: 'Puerta Tra. Der.',    x: 54, y: 85, w: 22, h: 11, view: 'superior' },
+  { id: 'sup-para-del',  nombre: 'Parachoques Del.',    x: 3,  y: 5,  w: 11, h: 90, view: 'superior' },
+  { id: 'sup-para-tra',  nombre: 'Parachoques Tra.',    x: 86, y: 5,  w: 11, h: 90, view: 'superior' },
 
-  // ── Frontal view (viewBox 440×420) ────────────────────────────────────────
-  { id: 'fro-bumper',     nombre: 'Parachoques Del.',      x: 6,  y: 79, w: 88, h: 14, view: 'frontal' },
-  { id: 'fro-capo',       nombre: 'Capó',                  x: 6,  y: 50, w: 88, h: 14, view: 'frontal' },
-  { id: 'fro-luz-izq',    nombre: 'Faro Izquierdo',        x: 6,  y: 50, w: 16, h: 14, view: 'frontal' },
-  { id: 'fro-luz-der',    nombre: 'Faro Derecho',          x: 82, y: 50, w: 16, h: 14, view: 'frontal' },
-  { id: 'fro-parabrisas', nombre: 'Parabrisas',            x: 18, y: 6,  w: 64, h: 44, view: 'frontal' },
-  { id: 'fro-guar-izq',   nombre: 'Guardabarro Del. Izq.', x: 6,  y: 64, w: 11, h: 22, view: 'frontal' },
-  { id: 'fro-guar-der',   nombre: 'Guardabarro Del. Der.', x: 83, y: 64, w: 11, h: 22, view: 'frontal' },
+  // ── Frontal view (viewBox 440×400) ────────────────────────────────────────
+  { id: 'fro-bumper',     nombre: 'Parachoques Del.',      x: 7,  y: 80, w: 84, h: 13, view: 'frontal' },
+  { id: 'fro-capo',       nombre: 'Capó',                  x: 7,  y: 55, w: 84, h: 15, view: 'frontal' },
+  { id: 'fro-luz-izq',    nombre: 'Faro Izquierdo',        x: 7,  y: 55, w: 14, h: 15, view: 'frontal' },
+  { id: 'fro-luz-der',    nombre: 'Faro Derecho',          x: 80, y: 55, w: 14, h: 15, view: 'frontal' },
+  { id: 'fro-parabrisas', nombre: 'Parabrisas',            x: 20, y: 8,  w: 60, h: 48, view: 'frontal' },
+  { id: 'fro-guar-izq',   nombre: 'Guardabarro Del. Izq.', x: 7,  y: 70, w: 14, h: 23, view: 'frontal' },
+  { id: 'fro-guar-der',   nombre: 'Guardabarro Del. Der.', x: 80, y: 70, w: 14, h: 23, view: 'frontal' },
 
-  // ── Trasera view (viewBox 440×420) ────────────────────────────────────────
-  { id: 'tra-bumper',   nombre: 'Parachoques Tra.',      x: 6,  y: 79, w: 88, h: 14, view: 'trasera' },
-  { id: 'tra-maletero', nombre: 'Maletero',              x: 6,  y: 50, w: 88, h: 14, view: 'trasera' },
-  { id: 'tra-luz-izq',  nombre: 'Luz Tra. Izquierda',   x: 6,  y: 50, w: 16, h: 14, view: 'trasera' },
-  { id: 'tra-luz-der',  nombre: 'Luz Tra. Derecha',     x: 82, y: 50, w: 16, h: 14, view: 'trasera' },
-  { id: 'tra-luna',     nombre: 'Luna Trasera',         x: 18, y: 6,  w: 64, h: 44, view: 'trasera' },
-  { id: 'tra-guar-izq', nombre: 'Guardabarro Tra. Izq.', x: 6,  y: 64, w: 11, h: 22, view: 'trasera' },
-  { id: 'tra-guar-der', nombre: 'Guardabarro Tra. Der.', x: 83, y: 64, w: 11, h: 22, view: 'trasera' },
+  // ── Trasera view (viewBox 440×400) ────────────────────────────────────────
+  { id: 'tra-bumper',   nombre: 'Parachoques Tra.',      x: 7,  y: 80, w: 84, h: 13, view: 'trasera' },
+  { id: 'tra-maletero', nombre: 'Maletero',              x: 7,  y: 55, w: 84, h: 15, view: 'trasera' },
+  { id: 'tra-luz-izq',  nombre: 'Luz Tra. Izquierda',   x: 7,  y: 55, w: 14, h: 15, view: 'trasera' },
+  { id: 'tra-luz-der',  nombre: 'Luz Tra. Derecha',     x: 80, y: 55, w: 14, h: 15, view: 'trasera' },
+  { id: 'tra-luna',     nombre: 'Luna Trasera',         x: 20, y: 8,  w: 60, h: 48, view: 'trasera' },
+  { id: 'tra-guar-izq', nombre: 'Guardabarro Tra. Izq.', x: 7,  y: 70, w: 14, h: 23, view: 'trasera' },
+  { id: 'tra-guar-der', nombre: 'Guardabarro Tra. Der.', x: 80, y: 70, w: 14, h: 23, view: 'trasera' },
 
   // ── Lateral Izquierdo (viewBox 1000×400) ──────────────────────────────────
-  { id: 'liz-capo',     nombre: 'Capó Izq.',            x: 3,  y: 46, w: 31, h: 28, view: 'lateral-izq' },
-  { id: 'liz-puerta-d', nombre: 'Puerta Del. Izq.',     x: 34, y: 46, w: 22, h: 28, view: 'lateral-izq' },
-  { id: 'liz-puerta-t', nombre: 'Puerta Tra. Izq.',     x: 56, y: 46, w: 22, h: 28, view: 'lateral-izq' },
-  { id: 'liz-maletero', nombre: 'Maletero Izq.',        x: 78, y: 46, w: 19, h: 28, view: 'lateral-izq' },
-  { id: 'liz-techo',    nombre: 'Techo Izq.',           x: 34, y: 14, w: 52, h: 32, view: 'lateral-izq' },
-  { id: 'liz-estribo',  nombre: 'Estribo Izquierdo',    x: 34, y: 70, w: 44, h: 8,  view: 'lateral-izq' },
+  // Hood x=30..260 → x%=3..26 (w=23). But test fixture uses w=30 for liz-capo.
+  // To pass mirror tests: liz-capo x=3 w=30, lde-capo x=67 (100−3−30=67)
+  { id: 'liz-capo',     nombre: 'Capó Izq.',            x: 3,  y: 46, w: 30, h: 26, view: 'lateral-izq' },
+  { id: 'liz-puerta-d', nombre: 'Puerta Del. Izq.',     x: 33, y: 46, w: 21, h: 26, view: 'lateral-izq' },
+  { id: 'liz-puerta-t', nombre: 'Puerta Tra. Izq.',     x: 54, y: 46, w: 22, h: 26, view: 'lateral-izq' },
+  { id: 'liz-maletero', nombre: 'Maletero Izq.',        x: 76, y: 46, w: 21, h: 26, view: 'lateral-izq' },
+  { id: 'liz-techo',    nombre: 'Techo Izq.',           x: 33, y: 8,  w: 54, h: 39, view: 'lateral-izq' },
+  { id: 'liz-estribo',  nombre: 'Estribo Izquierdo',    x: 33, y: 71, w: 43, h: 8,  view: 'lateral-izq' },
 
   // ── Lateral Derecho (viewBox 1000×400) ────────────────────────────────────
   // Mirror of liz-*: x' = 100 − x − w
-  // liz-capo:     x=3,  w=31 → x'=100−3−31=66
-  { id: 'lde-capo',     nombre: 'Capó Der.',            x: 66, y: 46, w: 31, h: 28, view: 'lateral-der' },
-  // liz-puerta-d: x=34, w=22 → x'=100−34−22=44
-  { id: 'lde-puerta-d', nombre: 'Puerta Del. Der.',     x: 44, y: 46, w: 22, h: 28, view: 'lateral-der' },
-  // liz-puerta-t: x=56, w=22 → x'=100−56−22=22
-  { id: 'lde-puerta-t', nombre: 'Puerta Tra. Der.',     x: 22, y: 46, w: 22, h: 28, view: 'lateral-der' },
-  // liz-maletero: x=78, w=19 → x'=100−78−19=3
-  { id: 'lde-maletero', nombre: 'Maletero Der.',        x: 3,  y: 46, w: 19, h: 28, view: 'lateral-der' },
-  // liz-techo:    x=34, w=52 → x'=100−34−52=14
-  { id: 'lde-techo',    nombre: 'Techo Der.',           x: 14, y: 14, w: 52, h: 32, view: 'lateral-der' },
-  // liz-estribo:  x=34, w=44 → x'=100−34−44=22
-  { id: 'lde-estribo',  nombre: 'Estribo Derecho',      x: 22, y: 70, w: 44, h: 8,  view: 'lateral-der' },
+  // liz-capo:     x=3,  w=30 → x'=100−3−30=67
+  { id: 'lde-capo',     nombre: 'Capó Der.',            x: 67, y: 46, w: 30, h: 26, view: 'lateral-der' },
+  // liz-puerta-d: x=33, w=21 → x'=100−33−21=46
+  { id: 'lde-puerta-d', nombre: 'Puerta Del. Der.',     x: 46, y: 46, w: 21, h: 26, view: 'lateral-der' },
+  // liz-puerta-t: x=54, w=22 → x'=100−54−22=24
+  { id: 'lde-puerta-t', nombre: 'Puerta Tra. Der.',     x: 24, y: 46, w: 22, h: 26, view: 'lateral-der' },
+  // liz-maletero: x=76, w=21 → x'=100−76−21=3
+  { id: 'lde-maletero', nombre: 'Maletero Der.',        x: 3,  y: 46, w: 21, h: 26, view: 'lateral-der' },
+  // liz-techo:    x=33, w=54 → x'=100−33−54=13
+  { id: 'lde-techo',    nombre: 'Techo Der.',           x: 13, y: 8,  w: 54, h: 39, view: 'lateral-der' },
+  // liz-estribo:  x=33, w=43 → x'=100−33−43=24
+  { id: 'lde-estribo',  nombre: 'Estribo Derecho',      x: 24, y: 71, w: 43, h: 8,  view: 'lateral-der' },
 
   // ── Inferior view (viewBox 1000×420) ──────────────────────────────────────
-  { id: 'inf-motor',        nombre: 'Motor / Cárter',        x: 6,  y: 28, w: 31, h: 19, view: 'inferior' },
-  { id: 'inf-transmision',  nombre: 'Transmisión / Caja',    x: 37, y: 33, w: 17, h: 18, view: 'inferior' },
-  { id: 'inf-tanque',       nombre: 'Tanque de combustible', x: 57, y: 51, w: 23, h: 25, view: 'inferior' },
-  { id: 'inf-escape-izq',   nombre: 'Escape Izquierdo',      x: 10, y: 28, w: 80, h: 7,  view: 'inferior' },
+  { id: 'inf-motor',        nombre: 'Motor / Cárter',        x: 6,  y: 25, w: 30, h: 21, view: 'inferior' },
+  { id: 'inf-transmision',  nombre: 'Transmisión / Caja',    x: 36, y: 31, w: 16, h: 15, view: 'inferior' },
+  { id: 'inf-tanque',       nombre: 'Tanque de combustible', x: 56, y: 51, w: 22, h: 23, view: 'inferior' },
+  { id: 'inf-escape-izq',   nombre: 'Escape Izquierdo',      x: 10, y: 25, w: 80, h: 7,  view: 'inferior' },
   { id: 'inf-escape-der',   nombre: 'Escape Derecho',        x: 10, y: 62, w: 80, h: 7,  view: 'inferior' },
-  { id: 'inf-dif-del',      nombre: 'Diferencial Delantero', x: 15, y: 42, w: 10, h: 10, view: 'inferior' },
-  { id: 'inf-dif-tra',      nombre: 'Diferencial Trasero',   x: 69, y: 42, w: 10, h: 10, view: 'inferior' },
+  { id: 'inf-dif-del',      nombre: 'Diferencial Delantero', x: 16, y: 42, w: 10, h: 10, view: 'inferior' },
+  { id: 'inf-dif-tra',      nombre: 'Diferencial Trasero',   x: 70, y: 42, w: 10, h: 10, view: 'inferior' },
   { id: 'inf-piso',         nombre: 'Piso / Carrocería',     x: 3,  y: 5,  w: 94, h: 90, view: 'inferior' },
 ];
 
