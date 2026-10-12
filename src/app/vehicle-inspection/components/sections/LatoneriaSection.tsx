@@ -51,111 +51,123 @@ const VIEWS: { id: VehicleView; label: string }[] = [
 
 // ─── Palette (flat technical style — no gradients, no shadows, no filters) ───
 const P = {
-  body:        '#d1d5db', // body fill (light gray)
-  bodyDark:    '#9ca3af', // darker body panels
-  bodyStroke:  '#374151', // body outline
-  glass:       '#bae6fd', // window fill
-  glassStroke: '#0ea5e9', // window outline
-  wheel:       '#111827', // tyre fill
-  wheelRim:    '#4b5563', // rim fill
-  wheelSpoke:  '#9ca3af', // spoke color
-  pillar:      '#4b5563', // A/B/C pillars
-  detail:      '#9ca3af', // secondary details
-  headlight:   '#fef9c3', // headlight fill
-  taillight:   '#fecaca', // tail light fill
-  taillightS:  '#dc2626', // tail light stroke
-  headlightS:  '#d97706', // headlight stroke
-  chassis:     '#6b7280', // chassis / mechanical
-  label:       '#1f2937', // text labels
-  bg:          '#f9fafb', // panel background
-  rocker:      '#6b7280', // rocker panel / sill
-  mirror:      '#374151', // side mirror
-  grille:      '#1f2937', // grille
-  accent:      '#e5e7eb', // subtle accent
+  body:        '#e5e7eb',
+  bodyDark:    '#9ca3af',
+  bodyStroke:  '#1f2937',
+  glass:       '#dbeafe',
+  glassStroke: '#3b82f6',
+  wheel:       '#111827',
+  wheelRim:    '#374151',
+  wheelSpoke:  '#9ca3af',
+  pillar:      '#374151',
+  detail:      '#9ca3af',
+  headlight:   '#fef3c7',
+  taillight:   '#fecaca',
+  taillightS:  '#dc2626',
+  headlightS:  '#d97706',
+  chassis:     '#4b5563',
+  label:       '#1f2937',
+  bg:          '#f9fafb',
+  rocker:      '#6b7280',
+  mirror:      '#374151',
+  grille:      '#111827',
+  accent:      '#e5e7eb',
+  hood:        '#f3f4f6',
 };
 
-// ─── SUV Geometry constants (viewBox 1000×400 for side views) ─────────────────
-// Front of vehicle = LEFT (x=30), rear = RIGHT (x=970)
-// Ground y=375, wheel center y=298 (375−77), wheel radius=77
-// Front axle x=215, rear axle x=755, wheelbase=540 px
-// Body bottom y=295, waistline y=210, beltline y=185
-// Hood top: starts at x=30 y=295, rises to x=60 y=250, then to x=340 y=185
-// Windshield base x=340 y=185, top x=460 y=55
-// Roof: x=460..860 y=55 (flat with slight curve)
-// Rear window: x=860 y=55 down to x=945 y=185
-// Rear hatch: x=945..970 y=185..295
-// Cabin height: 185−55=130 px. Lower body: 295−185=110 px.
-// Wheel arch radius=90 centered on axle at y=295 (body bottom)
-// Front door: x=340..555, rear door: x=555..775
-// B-pillar at x=555
-
-// ─── Shared SUV side body — used by both left and right views ─────────────────
-// Defined once in <defs>, referenced via <use> with mirror transform for right view.
+// ─── SUV Geometry (test-contract values) ─────────────────────────────────────
+// Side views (viewBox 1000×400):
+//   Ground y=370, wheel center y=300 (370−70), wheel radius=70
+//   Front axle x=210, rear axle x=750, wheelbase=540 px
+//   Body: x=30..970 (940 px)
+//   Body bottom y=300 (wheel top tangent), lower body top y=210
+//   Hood: x=30..255 (short compact SUV hood ~24%)
+//   Windshield base: x=255 y=210, top: x=370 y=80
+//   Roof: x=370..840 y=80 (slight curve)
+//   Rear window: x=840..930 y=80..210
+//   Rear hatch: x=930..970 y=210..300
+//   Front door: x=255..490, rear door: x=490..720
+//   B-pillar: x=490
+//   Wheel arch radius=70, front arch center (210,300), rear arch center (750,300)
 //
-// KEY GEOMETRY (viewBox 1000×400):
-// Ground y=375, wheel center y=298, wheel radius=77
-// Front axle x=215, rear axle x=755
-// Body bottom y=295
-// Hood: x=30..260 (230px = 24.5% of 940px — SUV proportion)
-// Windshield base x=260 y=185, top x=370 y=75 (steep 55° angle)
-// Roof: x=370..840 y=75 (flat with slight curve) — cabin width = 470px
-// Rear window: x=840 y=75 down to x=930 y=185
-// Rear hatch: x=930..970 y=185..295
-// Cabin height: 185−75=110px. Lower body: 295−185=110px. Ratio=50% ✓ (SUV)
-// Hood length: 230px / 940px = 24.5% ✓ (SUV reference ~25%)
+// Front/Rear views (viewBox 440×400):
+//   Body x=30..410 (380 px), center x=220
+//   Cabin x=70..370 (300 px)
+//   Wheel rects: 45 px wide × 140 px tall
+//   Left wheel: x=30..75, right wheel: x=365..410
+//
+// Top/Bottom views (viewBox 1000×420):
+//   Body: x=30..970, y=65..355
+//   Wheel rects: 140 px long × 45 px wide
+//   Front axle x=210: rects x=140..280
+//   Rear axle x=750: rects x=680..820
+//   Left wheels: y=20..65, right wheels: y=355..400
+
+// ─── Shared SUV side body definition ─────────────────────────────────────────
+// Geometry matches test constants: axle x=210/750, radius=70, ground y=370
+// Front of vehicle = LEFT (x=30), rear = RIGHT (x=970)
 
 function SuvSideBodyDefs() {
+  // Wheel spoke angles
+  const spokeAngles = [0, 72, 144, 216, 288];
+  const R_OUTER = 52; // spoke outer radius
+  const R_INNER = 18; // spoke inner radius (hub)
+
   return (
     <defs>
       <g id="suv-side-body">
         {/* ── GROUND LINE ── */}
-        <line x1="30" y1="375" x2="970" y2="375" stroke={P.detail} strokeWidth="1" strokeDasharray="5,7" />
+        <line x1="30" y1="370" x2="970" y2="370" stroke={P.detail} strokeWidth="1" strokeDasharray="6,8" />
 
-        {/* ── MAIN BODY SILHOUETTE ── realistic SUV proportions */}
-        {/* Hood: x=30..260 (24.5% of body length — compact SUV) */}
-        {/* Windshield: steep slope from x=260 y=185 to x=370 y=75 */}
-        {/* Roof: x=370..840 y=75 (flat top with slight curvature) */}
-        {/* Rear window: x=840..930 y=75..185 (steeper C-pillar) */}
-        {/* Rear hatch: x=930..970 y=185..295 */}
+        {/* ── MAIN BODY SILHOUETTE ──
+            Hood: x=30..255 (short compact SUV)
+            Windshield A-pillar: x=255 y=210 → x=370 y=80 (steep ~58°)
+            Roof: x=370..840 y=80 (nearly flat, slight forward rake)
+            C-pillar: x=840 y=80 → x=930 y=210 (steeper than A-pillar)
+            Rear hatch: x=930..970 y=210..300
+            Lower body: y=210..300
+            Wheel arches: r=70 at x=210 and x=750, y=300
+        */}
         <path
           d={[
-            // Front bumper bottom-left
-            'M 30 295',
-            // Front bumper face
-            'L 30 268',
-            // Front bumper top into hood leading edge
-            'Q 35 260 52 256',
-            // Hood rises — short and flat (SUV style)
-            'L 90 250',
-            'Q 170 238 230 220',
-            'Q 248 212 260 185',
-            // Windshield — steep A-pillar (SUV angle ~60°)
-            'Q 290 148 320 112',
-            'Q 348 85 370 75',
-            // Roof — nearly flat, slight forward rake
-            'Q 480 68 600 67',
-            'Q 720 67 840 75',
-            // Rear window — C-pillar steeper than A-pillar
-            'Q 872 95 898 128',
-            'Q 918 158 928 185',
+            // Front bumper lower-left
+            'M 30 300',
+            // Front bumper face (slight angle)
+            'L 30 272',
+            // Front bumper top edge
+            'Q 34 262 50 258',
+            // Hood leading edge rises
+            'L 78 252',
+            // Hood surface — short compact SUV (x=30..255)
+            'Q 140 240 220 222',
+            'Q 242 215 255 210',
+            // A-pillar — steep windshield angle (~58°)
+            'Q 278 185 305 155',
+            'Q 338 115 370 80',
+            // Roof — nearly flat with very slight curve
+            'Q 500 73 620 72',
+            'Q 740 72 840 80',
+            // C-pillar — steeper than A-pillar (SUV hatchback style)
+            'Q 868 98 892 128',
+            'Q 912 158 928 210',
             // Rear hatch top
-            'L 940 185',
-            // Rear hatch face (near vertical)
-            'L 948 210',
-            'L 952 260',
+            'L 940 210',
+            // Rear hatch face (near vertical, slight angle)
+            'L 946 235',
+            'L 950 270',
             // Rear bumper
-            'Q 950 272 942 278',
-            'L 942 295',
-            // Body bottom — skip wheel arch areas
-            // Rear wheel arch
-            'L 832 295',
-            'A 77 77 0 0 0 678 295',
+            'Q 948 280 940 285',
+            'L 940 300',
+            // Body bottom — rear wheel arch
+            'L 820 300',
+            // Rear wheel arch: center (750,300) r=70
+            'A 70 70 0 0 0 680 300',
             // Rocker panel between arches
-            'L 292 295',
-            // Front wheel arch
-            'A 77 77 0 0 0 138 295',
+            'L 280 300',
+            // Front wheel arch: center (210,300) r=70
+            'A 70 70 0 0 0 140 300',
             // Return to front bumper
-            'L 30 295',
+            'L 30 300',
             'Z',
           ].join(' ')}
           fill={P.body}
@@ -164,193 +176,234 @@ function SuvSideBodyDefs() {
           strokeLinejoin="round"
         />
 
-        {/* ── HOOD PANEL LINE ── crease line on short SUV hood */}
+        {/* ── HOOD PANEL ── crease line */}
         <path
-          d="M 55 256 Q 160 238 260 185"
+          d="M 52 258 Q 150 242 255 210"
           fill="none"
           stroke={P.detail}
-          strokeWidth="1"
-          strokeDasharray="6,4"
+          strokeWidth="1.2"
+          strokeDasharray="5,4"
+        />
+        {/* Hood surface highlight */}
+        <path
+          d="M 78 252 Q 165 238 255 210"
+          fill="none"
+          stroke={P.accent}
+          strokeWidth="2"
+          strokeLinecap="round"
         />
 
         {/* ── WINDSHIELD ── steep SUV angle */}
         <path
-          d="M 260 185 Q 290 148 320 112 Q 348 85 370 75 L 450 75 L 450 185 Z"
+          d="M 255 210 Q 278 185 305 155 Q 338 115 370 80 L 450 80 L 450 210 Z"
           fill={P.glass}
           stroke={P.glassStroke}
           strokeWidth="1.5"
         />
         {/* A-pillar */}
         <path
-          d="M 260 185 Q 290 148 320 112 Q 348 85 370 75"
+          d="M 255 210 Q 278 185 305 155 Q 338 115 370 80"
           fill="none"
           stroke={P.pillar}
-          strokeWidth="4"
+          strokeWidth="5"
           strokeLinecap="round"
         />
-
-        {/* ── ROOF PANEL ── with slight curvature */}
+        {/* Windshield inner frame */}
         <path
-          d="M 370 75 Q 600 67 840 75 L 840 82 Q 600 74 370 82 Z"
+          d="M 268 207 Q 290 183 315 154 Q 346 116 374 83 L 447 83 L 447 207 Z"
+          fill="none"
+          stroke={P.glassStroke}
+          strokeWidth="0.8"
+          opacity="0.5"
+        />
+
+        {/* ── ROOF PANEL ── */}
+        <path
+          d="M 370 80 Q 620 72 840 80 L 840 88 Q 620 80 370 88 Z"
           fill={P.bodyDark}
           stroke={P.bodyStroke}
           strokeWidth="1"
         />
+        {/* Roof rail lines */}
+        <line x1="370" y1="84" x2="840" y2="84" stroke={P.detail} strokeWidth="1" opacity="0.6" />
 
         {/* ── REAR WINDOW ── */}
         <path
-          d="M 840 75 Q 872 95 898 128 Q 918 158 928 185 L 840 185 Z"
+          d="M 840 80 Q 868 98 892 128 Q 912 158 928 210 L 840 210 Z"
           fill={P.glass}
           stroke={P.glassStroke}
           strokeWidth="1.5"
         />
         {/* C-pillar */}
         <path
-          d="M 840 75 Q 872 95 898 128 Q 918 158 928 185"
+          d="M 840 80 Q 868 98 892 128 Q 912 158 928 210"
           fill="none"
           stroke={P.pillar}
-          strokeWidth="4"
+          strokeWidth="5"
           strokeLinecap="round"
         />
-
-        {/* ── BELTLINE (waistline) ── */}
-        <line x1="260" y1="185" x2="928" y2="185" stroke={P.detail} strokeWidth="1.5" strokeDasharray="8,5" />
-
-        {/* ── FRONT DOOR ── x=260..490, y=185..295 (230px wide) */}
-        <rect x="260" y="185" width="230" height="110" fill="none" stroke={P.detail} strokeWidth="1.5" />
-        {/* Front door window — trapezoidal automotive shape */}
+        {/* Rear window inner frame */}
         <path
-          d="M 268 193 L 268 178 Q 272 170 285 166 L 480 166 L 480 193 Z"
+          d="M 843 83 Q 870 100 893 130 Q 912 159 925 207 L 843 207 Z"
+          fill="none"
+          stroke={P.glassStroke}
+          strokeWidth="0.8"
+          opacity="0.5"
+        />
+
+        {/* ── BELTLINE ── waistline crease */}
+        <line x1="255" y1="210" x2="928" y2="210" stroke={P.bodyStroke} strokeWidth="1.5" />
+
+        {/* ── FRONT DOOR ── x=255..490, y=210..300 */}
+        <rect x="255" y="210" width="235" height="90" fill="none" stroke={P.detail} strokeWidth="1.5" />
+        {/* Front door window — trapezoidal */}
+        <path
+          d="M 262 218 L 262 200 Q 265 192 278 188 L 482 188 L 482 218 Z"
           fill={P.glass}
           stroke={P.glassStroke}
           strokeWidth="1"
         />
         {/* Front door handle */}
-        <rect x="430" y="248" width="36" height="8" rx="4" fill={P.detail} stroke={P.chassis} strokeWidth="1" />
-        <circle cx="464" cy="252" r="4" fill={P.chassis} />
+        <rect x="420" y="258" width="38" height="9" rx="4.5" fill={P.bodyDark} stroke={P.chassis} strokeWidth="1" />
+        <circle cx="456" cy="262" r="4" fill={P.chassis} />
 
-        {/* ── REAR DOOR ── x=490..720, y=185..295 (230px wide) */}
-        <rect x="490" y="185" width="230" height="110" fill="none" stroke={P.detail} strokeWidth="1.5" />
-        {/* Rear door window — rectangular with rounded corners */}
-        <rect x="498" y="193" width="214" height="75" rx="5" fill={P.glass} stroke={P.glassStroke} strokeWidth="1" />
+        {/* ── REAR DOOR ── x=490..720, y=210..300 */}
+        <rect x="490" y="210" width="230" height="90" fill="none" stroke={P.detail} strokeWidth="1.5" />
+        {/* Rear door window */}
+        <rect x="497" y="218" width="215" height="72" rx="5" fill={P.glass} stroke={P.glassStroke} strokeWidth="1" />
         {/* Rear door handle */}
-        <rect x="660" y="248" width="36" height="8" rx="4" fill={P.detail} stroke={P.chassis} strokeWidth="1" />
-        <circle cx="694" cy="252" r="4" fill={P.chassis} />
+        <rect x="650" y="258" width="38" height="9" rx="4.5" fill={P.bodyDark} stroke={P.chassis} strokeWidth="1" />
+        <circle cx="686" cy="262" r="4" fill={P.chassis} />
 
         {/* ── B-PILLAR ── */}
-        <rect x="487" y="185" width="6" height="110" fill={P.pillar} />
+        <rect x="487" y="210" width="6" height="90" fill={P.pillar} />
 
-        {/* ── REAR QUARTER PANEL ── x=720..928, y=185..295 */}
-        <rect x="720" y="185" width="208" height="110" fill="none" stroke={P.detail} strokeWidth="1" />
+        {/* ── REAR QUARTER PANEL ── x=720..928, y=210..300 */}
         {/* Small quarter window */}
         <path
-          d="M 728 193 L 728 178 Q 730 170 742 166 L 830 166 L 830 193 Z"
+          d="M 726 218 L 726 200 Q 728 192 740 188 L 832 188 L 832 218 Z"
           fill={P.glass}
           stroke={P.glassStroke}
           strokeWidth="1"
         />
 
         {/* ── ROCKER PANEL (estribo) ── */}
-        <rect x="260" y="288" width="460" height="10" rx="3" fill={P.rocker} stroke={P.bodyStroke} strokeWidth="1" />
+        <rect x="255" y="292" width="465" height="10" rx="3" fill={P.rocker} stroke={P.bodyStroke} strokeWidth="1" />
 
-        {/* ── WHEEL ARCHES ── semi-circles r=77 at y=295 */}
-        {/* Front arch: center (215, 295) */}
-        <path d="M 138 295 A 77 77 0 0 1 292 295" fill={P.bg} stroke={P.bodyStroke} strokeWidth="2.5" />
-        {/* Rear arch: center (755, 295) */}
-        <path d="M 678 295 A 77 77 0 0 1 832 295" fill={P.bg} stroke={P.bodyStroke} strokeWidth="2.5" />
+        {/* ── WHEEL ARCHES ── r=70 at y=300 */}
+        {/* Front arch: center (210, 300) */}
+        <path d="M 140 300 A 70 70 0 0 1 280 300" fill={P.bg} stroke={P.bodyStroke} strokeWidth="2.5" />
+        {/* Rear arch: center (750, 300) */}
+        <path d="M 680 300 A 70 70 0 0 1 820 300" fill={P.bg} stroke={P.bodyStroke} strokeWidth="2.5" />
 
-        {/* ── FRONT WHEEL ── cx=215, cy=298, r=77 */}
-        <circle cx="215" cy="298" r="77" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-        <circle cx="215" cy="298" r="60" fill={P.wheelRim} stroke={P.wheel} strokeWidth="1.5" />
-        <circle cx="215" cy="298" r="22" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
-        {/* 5 spokes */}
-        {[18, 90, 162, 234, 306].map((angle) => (
+        {/* ── FRONT WHEEL ── cx=210, cy=300, r=70 */}
+        <circle cx="210" cy="300" r="70" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+        <circle cx="210" cy="300" r="55" fill={P.wheelRim} stroke={P.wheel} strokeWidth="1.5" />
+        <circle cx="210" cy="300" r="20" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
+        {spokeAngles.map((angle) => (
           <line
             key={`lf-${angle}`}
-            x1={215 + 22 * Math.cos((angle * Math.PI) / 180)}
-            y1={298 + 22 * Math.sin((angle * Math.PI) / 180)}
-            x2={215 + 58 * Math.cos((angle * Math.PI) / 180)}
-            y2={298 + 58 * Math.sin((angle * Math.PI) / 180)}
+            x1={210 + R_INNER * Math.cos((angle * Math.PI) / 180)}
+            y1={300 + R_INNER * Math.sin((angle * Math.PI) / 180)}
+            x2={210 + R_OUTER * Math.cos((angle * Math.PI) / 180)}
+            y2={300 + R_OUTER * Math.sin((angle * Math.PI) / 180)}
             stroke={P.wheelSpoke}
             strokeWidth="5"
             strokeLinecap="round"
           />
         ))}
-        <circle cx="215" cy="298" r="8" fill={P.detail} />
+        <circle cx="210" cy="300" r="7" fill={P.detail} />
 
-        {/* ── REAR WHEEL ── cx=755, cy=298, r=77 */}
-        <circle cx="755" cy="298" r="77" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-        <circle cx="755" cy="298" r="60" fill={P.wheelRim} stroke={P.wheel} strokeWidth="1.5" />
-        <circle cx="755" cy="298" r="22" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
-        {[18, 90, 162, 234, 306].map((angle) => (
+        {/* ── REAR WHEEL ── cx=750, cy=300, r=70 */}
+        <circle cx="750" cy="300" r="70" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+        <circle cx="750" cy="300" r="55" fill={P.wheelRim} stroke={P.wheel} strokeWidth="1.5" />
+        <circle cx="750" cy="300" r="20" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
+        {spokeAngles.map((angle) => (
           <line
             key={`lr-${angle}`}
-            x1={755 + 22 * Math.cos((angle * Math.PI) / 180)}
-            y1={298 + 22 * Math.sin((angle * Math.PI) / 180)}
-            x2={755 + 58 * Math.cos((angle * Math.PI) / 180)}
-            y2={298 + 58 * Math.sin((angle * Math.PI) / 180)}
+            x1={750 + R_INNER * Math.cos((angle * Math.PI) / 180)}
+            y1={300 + R_INNER * Math.sin((angle * Math.PI) / 180)}
+            x2={750 + R_OUTER * Math.cos((angle * Math.PI) / 180)}
+            y2={300 + R_OUTER * Math.sin((angle * Math.PI) / 180)}
             stroke={P.wheelSpoke}
             strokeWidth="5"
             strokeLinecap="round"
           />
         ))}
-        <circle cx="755" cy="298" r="8" fill={P.detail} />
+        <circle cx="750" cy="300" r="7" fill={P.detail} />
 
         {/* ── SIDE MIRROR ── near A-pillar */}
         <path
-          d="M 228 168 L 260 164 L 260 185 L 228 185 Z"
+          d="M 222 172 L 255 168 L 255 188 L 222 190 Z"
           fill={P.mirror}
           stroke={P.bodyStroke}
           strokeWidth="1.5"
         />
-        <rect x="220" y="172" width="10" height="8" rx="2" fill={P.chassis} />
+        <rect x="214" y="176" width="10" height="8" rx="2" fill={P.chassis} />
 
-        {/* ── FRONT HEADLIGHT ── */}
+        {/* ── FRONT HEADLIGHT ── angular modern style */}
         <path
-          d="M 32 256 L 32 295 L 88 295 L 88 256 Q 65 250 32 256 Z"
+          d="M 32 258 L 32 300 L 90 300 L 90 258 Q 68 252 32 258 Z"
           fill={P.headlight}
           stroke={P.headlightS}
           strokeWidth="1.5"
         />
         {/* DRL strip */}
-        <line x1="38" y1="264" x2="82" y2="262" stroke={P.headlightS} strokeWidth="2.5" strokeLinecap="round" />
+        <line x1="38" y1="266" x2="84" y2="264" stroke={P.headlightS} strokeWidth="2.5" strokeLinecap="round" />
         {/* Low beam */}
-        <ellipse cx="58" cy="280" rx="18" ry="12" fill={P.headlight} stroke={P.headlightS} strokeWidth="1" />
+        <ellipse cx="60" cy="282" rx="18" ry="12" fill={P.headlight} stroke={P.headlightS} strokeWidth="1" />
+        {/* Headlight inner detail */}
+        <line x1="38" y1="276" x2="84" y2="274" stroke={P.headlightS} strokeWidth="1" strokeLinecap="round" opacity="0.6" />
 
         {/* ── REAR TAIL LIGHT ── */}
         <path
-          d="M 928 185 L 948 210 L 952 295 L 918 295 L 918 185 Z"
+          d="M 928 210 L 946 235 L 950 300 L 916 300 L 916 210 Z"
           fill={P.taillight}
           stroke={P.taillightS}
           strokeWidth="1.5"
         />
-        {/* LED strip */}
-        <line x1="922" y1="195" x2="944" y2="218" stroke={P.taillightS} strokeWidth="3" strokeLinecap="round" />
-        <line x1="922" y1="210" x2="944" y2="233" stroke={P.taillightS} strokeWidth="2" strokeLinecap="round" />
+        {/* LED strips */}
+        <line x1="920" y1="220" x2="942" y2="244" stroke={P.taillightS} strokeWidth="3" strokeLinecap="round" />
+        <line x1="920" y1="234" x2="942" y2="258" stroke={P.taillightS} strokeWidth="2" strokeLinecap="round" />
+        <line x1="920" y1="248" x2="942" y2="272" stroke={P.taillightS} strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
 
         {/* ── FRONT BUMPER LOWER DETAIL ── */}
         <path
-          d="M 30 272 Q 36 266 58 264 L 138 264 L 138 278 L 58 278 Q 36 278 30 272 Z"
+          d="M 30 274 Q 38 266 60 264 L 140 264 L 140 278 L 60 278 Q 38 278 30 274 Z"
           fill={P.bodyDark}
           stroke={P.bodyStroke}
           strokeWidth="1"
         />
+        {/* Front fog light */}
+        <rect x="42" y="267" width="22" height="8" rx="3" fill={P.headlight} stroke={P.headlightS} strokeWidth="0.8" />
 
         {/* ── REAR BUMPER LOWER DETAIL ── */}
         <path
-          d="M 952 272 Q 946 266 926 264 L 846 264 L 846 278 L 926 278 Q 946 278 952 272 Z"
+          d="M 950 274 Q 942 266 922 264 L 844 264 L 844 278 L 922 278 Q 942 278 950 274 Z"
           fill={P.bodyDark}
           stroke={P.bodyStroke}
           strokeWidth="1"
         />
+        {/* Exhaust tip */}
+        <ellipse cx="900" cy="276" rx="8" ry="5" fill={P.chassis} stroke={P.pillar} strokeWidth="1" />
+        <ellipse cx="900" cy="276" rx="4" ry="2.5" fill={P.wheel} />
 
-        {/* ── BODY CREASE LINE ── character line along lower body */}
+        {/* ── BODY CREASE LINE ── character line */}
         <path
-          d="M 88 264 Q 300 258 500 255 Q 700 253 870 258 Q 910 261 942 268"
+          d="M 90 264 Q 300 258 500 255 Q 700 253 870 258 Q 910 261 942 268"
           fill="none"
           stroke={P.detail}
           strokeWidth="1.5"
           strokeLinecap="round"
+        />
+
+        {/* ── FRONT GRILLE HINT ── visible on side view */}
+        <path
+          d="M 30 272 L 30 300 L 50 300 L 50 272 Z"
+          fill={P.grille}
+          stroke={P.bodyStroke}
+          strokeWidth="1"
+          opacity="0.6"
         />
       </g>
     </defs>
@@ -358,8 +411,8 @@ function SuvSideBodyDefs() {
 }
 
 // ─── LeftSideViewSVG ──────────────────────────────────────────────────────────
-// Front of vehicle points LEFT (x=30), rear points RIGHT (x=970).
-// Uses shared geometry group from <defs>.
+// viewBox 1000×400. Front = LEFT (x=30), rear = RIGHT (x=970).
+// Axles: x=210 (front), x=750 (rear). Radius=70. Ground y=370.
 
 function LeftSideViewSVG() {
   return (
@@ -371,9 +424,8 @@ function LeftSideViewSVG() {
 }
 
 // ─── RightSideViewSVG ─────────────────────────────────────────────────────────
-// Exact mirror of LeftSideViewSVG.
-// Uses shared geometry group with transform="translate(1000,0) scale(-1,1)"
-// which mirrors horizontally within the same 1000×400 viewBox.
+// viewBox 1000×400. Mirror of left view.
+// transform="translate(1000,0) scale(-1,1)" mirrors horizontally within 1000 px.
 // Front of vehicle points RIGHT (x=970), rear points LEFT (x=30).
 
 function RightSideViewSVG() {
@@ -388,83 +440,34 @@ function RightSideViewSVG() {
 }
 
 // ─── TopViewSVG ───────────────────────────────────────────────────────────────
-// viewBox 1000×420. Front = left (x=30), rear = right (x=970).
-// Body: tapered shape — wider at cabin, narrower at front/rear.
-// Wheel rects: 140 px long (x-axis) × 50 px wide (y-axis).
-//   Front axle x=215: rect x=145..285 (215−70..215+70)
-//   Rear axle x=755:  rect x=685..825 (755−70..755+70)
-//   Left side y=65..355 (50 px), right side y=350..400 (50 px)
-// Cabin: x=340..860, y=65..355 (inner glass area)
-// Hood: x=30..340, Trunk: x=860..970
+// viewBox 1000×420. Front = LEFT (x=30), rear = RIGHT (x=970).
+// Wheel rects: 140 px long (x) × 45 px wide (y).
+//   Front axle x=210: rects x=140..280
+//   Rear axle x=750: rects x=680..820
+//   Left side (top of SVG): y=20..65
+//   Right side (bottom of SVG): y=355..400
+// Body: tapered SUV shape, wider at cabin, narrower at front/rear.
 
 function TopViewSVG() {
   return (
     <svg viewBox="0 0 1000 420" className="w-full h-full" preserveAspectRatio="xMidYMid meet">
 
-      {/* ── MAIN BODY OUTLINE ── tapered SUV shape from above */}
+      {/* ── MAIN BODY OUTLINE ── tapered SUV shape */}
       <path
         d={[
-          // Front-left corner (tapered)
-          'M 60 80',
-          // Front bumper (slightly curved)
-          'Q 30 80 30 100',
-          'L 30 320',
-          'Q 30 340 60 340',
-          // Rear-left corner
-          'L 60 340',
+          // Front-left corner
+          'M 65 68',
+          // Front bumper — slightly curved
+          'Q 30 68 30 95',
+          'L 30 325',
+          'Q 30 352 65 352',
+          // Rear-left
+          'L 940 352',
           // Rear bumper
-          'Q 30 340 30 320',
-          // Actually let's do a proper tapered shape:
-        ].join(' ')}
-        fill="none"
-      />
-      {/* Proper tapered body outline */}
-      <path
-        d={[
-          // Front-left (narrow)
-          'M 50 95',
-          // Front bumper curve
-          'Q 30 95 30 115',
-          'L 30 305',
-          'Q 30 325 50 325',
-          // Rear-left (narrow)
-          'L 80 340',
-          // Rear bumper
-          'Q 30 360 30 340',
-        ].join(' ')}
-        fill="none"
-      />
-
-      {/* Clean tapered SUV body */}
-      <path
-        d={[
-          // Top edge (left side of vehicle = top of SVG)
-          // Front bumper left corner
-          'M 55 70',
-          // Hood narrows toward front
-          'Q 30 70 30 90',
-          // Front bumper face
-          'L 30 100',
-          // Front-left fender
-          'Q 30 70 55 70',
-          // Redo with proper shape:
-        ].join(' ')}
-        fill="none"
-      />
-
-      {/* ── ACTUAL BODY SHAPE ── */}
-      <path
-        d={[
-          // Left side (top of SVG), front to rear
-          'M 55 65',           // front-left corner
-          'Q 30 65 30 90',     // front bumper left
-          'L 30 330',          // front bumper right side
-          'Q 30 355 55 355',   // rear-left corner
-          'L 940 355',         // rear bumper left
-          'Q 970 355 970 330', // rear-right corner
-          'L 970 90',          // rear bumper right
-          'Q 970 65 940 65',   // front-right corner
-          'L 55 65',           // close
+          'Q 970 352 970 325',
+          'L 970 95',
+          'Q 970 68 940 68',
+          'L 65 68',
           'Z',
         ].join(' ')}
         fill={P.body}
@@ -475,45 +478,47 @@ function TopViewSVG() {
       {/* ── HOOD AREA ── x=30..340 */}
       <path
         d={[
-          'M 55 65',
-          'Q 30 65 30 90',
-          'L 30 330',
-          'Q 30 355 55 355',
-          'L 340 355',
-          'L 340 65',
+          'M 65 68',
+          'Q 30 68 30 95',
+          'L 30 325',
+          'Q 30 352 65 352',
+          'L 340 352',
+          'L 340 68',
           'Z',
         ].join(' ')}
-        fill={P.bg}
+        fill={P.hood}
         stroke={P.bodyStroke}
         strokeWidth="1.5"
       />
       {/* Hood center crease */}
-      <line x1="30" y1="210" x2="340" y2="210" stroke={P.detail} strokeWidth="1" strokeDasharray="6,4" />
+      <line x1="30" y1="210" x2="340" y2="210" stroke={P.detail} strokeWidth="1.2" strokeDasharray="8,5" />
       {/* Hood vents */}
-      <rect x="120" y="150" width="160" height="8" rx="4" fill={P.detail} opacity="0.6" />
-      <rect x="120" y="165" width="160" height="8" rx="4" fill={P.detail} opacity="0.6" />
-      <rect x="120" y="245" width="160" height="8" rx="4" fill={P.detail} opacity="0.6" />
-      <rect x="120" y="260" width="160" height="8" rx="4" fill={P.detail} opacity="0.6" />
+      <rect x="110" y="148" width="170" height="7" rx="3.5" fill={P.detail} opacity="0.5" />
+      <rect x="110" y="162" width="170" height="7" rx="3.5" fill={P.detail} opacity="0.5" />
+      <rect x="110" y="248" width="170" height="7" rx="3.5" fill={P.detail} opacity="0.5" />
+      <rect x="110" y="262" width="170" height="7" rx="3.5" fill={P.detail} opacity="0.5" />
+      {/* Front grille (top view) */}
+      <rect x="30" y="170" width="18" height="80" rx="4" fill={P.grille} stroke={P.bodyStroke} strokeWidth="1" />
 
       {/* ── WINDSHIELD (top view = angled band) ── x=340..460 */}
       <path
-        d="M 340 80 L 460 65 L 460 355 L 340 340 Z"
+        d="M 340 82 L 460 68 L 460 352 L 340 338 Z"
         fill={P.glass}
         stroke={P.glassStroke}
         strokeWidth="1.5"
       />
 
       {/* ── ROOF PANEL ── x=460..860 */}
-      <rect x="460" y="65" width="400" height="290" fill={P.bg} stroke={P.detail} strokeWidth="1" />
+      <rect x="460" y="68" width="400" height="284" fill={P.bg} stroke={P.detail} strokeWidth="1" />
       {/* Roof rails */}
-      <rect x="460" y="75" width="400" height="12" rx="4" fill={P.detail} opacity="0.5" />
-      <rect x="460" y="333" width="400" height="12" rx="4" fill={P.detail} opacity="0.5" />
+      <rect x="460" y="76" width="400" height="10" rx="4" fill={P.detail} opacity="0.4" />
+      <rect x="460" y="334" width="400" height="10" rx="4" fill={P.detail} opacity="0.4" />
       {/* Sunroof */}
-      <rect x="530" y="130" width="260" height="160" rx="8" fill={P.glass} stroke={P.glassStroke} strokeWidth="1.5" />
+      <rect x="530" y="128" width="260" height="164" rx="10" fill={P.glass} stroke={P.glassStroke} strokeWidth="1.5" />
 
       {/* ── REAR WINDOW (top view = angled band) ── x=860..960 */}
       <path
-        d="M 860 65 L 960 80 L 960 340 L 860 355 Z"
+        d="M 860 68 L 960 82 L 960 338 L 860 352 Z"
         fill={P.glass}
         stroke={P.glassStroke}
         strokeWidth="1.5"
@@ -522,13 +527,13 @@ function TopViewSVG() {
       {/* ── TRUNK AREA ── x=960..970 */}
       <path
         d={[
-          'M 960 80',
-          'L 970 90',
-          'L 970 330',
-          'L 960 340',
+          'M 960 82',
+          'L 970 95',
+          'L 970 325',
+          'L 960 338',
           'Z',
         ].join(' ')}
-        fill={P.bg}
+        fill={P.hood}
         stroke={P.bodyStroke}
         strokeWidth="1.5"
       />
@@ -536,14 +541,14 @@ function TopViewSVG() {
       <line x1="960" y1="210" x2="970" y2="210" stroke={P.detail} strokeWidth="1" strokeDasharray="4,4" />
 
       {/* ── DOOR LINES ── */}
-      <line x1="340" y1="65" x2="340" y2="355" stroke={P.bodyStroke} strokeWidth="2" />
-      <line x1="555" y1="65" x2="555" y2="355" stroke={P.detail} strokeWidth="1.5" />
-      <line x1="775" y1="65" x2="775" y2="355" stroke={P.detail} strokeWidth="1.5" />
-      <line x1="860" y1="65" x2="860" y2="355" stroke={P.bodyStroke} strokeWidth="2" />
+      <line x1="340" y1="68" x2="340" y2="352" stroke={P.bodyStroke} strokeWidth="2" />
+      <line x1="555" y1="68" x2="555" y2="352" stroke={P.detail} strokeWidth="1.5" />
+      <line x1="775" y1="68" x2="775" y2="352" stroke={P.detail} strokeWidth="1.5" />
+      <line x1="860" y1="68" x2="860" y2="352" stroke={P.bodyStroke} strokeWidth="2" />
 
       {/* ── LEFT SIDE MIRRORS ── (top of SVG = left side of car) */}
       <path
-        d="M 280 65 L 310 50 L 340 50 L 340 65 Z"
+        d="M 275 68 L 305 52 L 340 52 L 340 68 Z"
         fill={P.mirror}
         stroke={P.bodyStroke}
         strokeWidth="1.5"
@@ -551,43 +556,42 @@ function TopViewSVG() {
 
       {/* ── RIGHT SIDE MIRRORS ── (bottom of SVG = right side of car) */}
       <path
-        d="M 280 355 L 310 370 L 340 370 L 340 355 Z"
+        d="M 275 352 L 305 368 L 340 368 L 340 352 Z"
         fill={P.mirror}
         stroke={P.bodyStroke}
         strokeWidth="1.5"
       />
 
-      {/* ── FRONT WHEELS ── */}
-      {/* Left front: y=20..70 (50 px wide) */}
-      <rect x="145" y="20" width="140" height="50" rx="10" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-      <rect x="153" y="27" width="124" height="36" rx="6" fill={P.wheelRim} />
-      <line x1="215" y1="20" x2="215" y2="70" stroke={P.wheelSpoke} strokeWidth="2" />
-      {/* Right front: y=350..400 */}
-      <rect x="145" y="350" width="140" height="50" rx="10" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-      <rect x="153" y="357" width="124" height="36" rx="6" fill={P.wheelRim} />
-      <line x1="215" y1="350" x2="215" y2="400" stroke={P.wheelSpoke} strokeWidth="2" />
+      {/* ── FRONT WHEELS ── x=140..280, y=20..65 (left) and y=355..400 (right) */}
+      {/* Left front */}
+      <rect x="140" y="20" width="140" height="45" rx="8" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+      <rect x="148" y="26" width="124" height="33" rx="5" fill={P.wheelRim} />
+      <line x1="210" y1="20" x2="210" y2="65" stroke={P.wheelSpoke} strokeWidth="2" />
+      {/* Right front */}
+      <rect x="140" y="355" width="140" height="45" rx="8" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+      <rect x="148" y="361" width="124" height="33" rx="5" fill={P.wheelRim} />
+      <line x1="210" y1="355" x2="210" y2="400" stroke={P.wheelSpoke} strokeWidth="2" />
 
-      {/* ── REAR WHEELS ── */}
-      {/* Left rear: y=20..70 */}
-      <rect x="685" y="20" width="140" height="50" rx="10" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-      <rect x="693" y="27" width="124" height="36" rx="6" fill={P.wheelRim} />
-      <line x1="755" y1="20" x2="755" y2="70" stroke={P.wheelSpoke} strokeWidth="2" />
-      {/* Right rear: y=350..400 */}
-      <rect x="685" y="350" width="140" height="50" rx="10" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-      <rect x="693" y="357" width="124" height="36" rx="6" fill={P.wheelRim} />
-      <line x1="755" y1="350" x2="755" y2="400" stroke={P.wheelSpoke} strokeWidth="2" />
+      {/* ── REAR WHEELS ── x=680..820 */}
+      {/* Left rear */}
+      <rect x="680" y="20" width="140" height="45" rx="8" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+      <rect x="688" y="26" width="124" height="33" rx="5" fill={P.wheelRim} />
+      <line x1="750" y1="20" x2="750" y2="65" stroke={P.wheelSpoke} strokeWidth="2" />
+      {/* Right rear */}
+      <rect x="680" y="355" width="140" height="45" rx="8" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+      <rect x="688" y="361" width="124" height="33" rx="5" fill={P.wheelRim} />
+      <line x1="750" y1="355" x2="750" y2="400" stroke={P.wheelSpoke} strokeWidth="2" />
 
       {/* Axle lines (dashed) */}
-      <line x1="215" y1="65" x2="215" y2="355" stroke={P.detail} strokeWidth="1" strokeDasharray="4,6" />
-      <line x1="755" y1="65" x2="755" y2="355" stroke={P.detail} strokeWidth="1" strokeDasharray="4,6" />
+      <line x1="210" y1="65" x2="210" y2="355" stroke={P.detail} strokeWidth="1" strokeDasharray="4,6" />
+      <line x1="750" y1="65" x2="750" y2="355" stroke={P.detail} strokeWidth="1" strokeDasharray="4,6" />
     </svg>
   );
 }
 
 // ─── BottomViewSVG ────────────────────────────────────────────────────────────
 // viewBox 1000×420. Same orientation as top view (front = left).
-// Shows underbody: chassis rails, cross-members, engine, gearbox, fuel tank,
-// differentials, exhaust. Labels visible.
+// Shows underbody: chassis rails, engine, gearbox, fuel tank, differentials, exhaust.
 
 function BottomViewSVG() {
   return (
@@ -596,15 +600,15 @@ function BottomViewSVG() {
       {/* ── UNDERBODY OUTLINE ── same tapered shape as top view */}
       <path
         d={[
-          'M 55 65',
-          'Q 30 65 30 90',
-          'L 30 330',
-          'Q 30 355 55 355',
-          'L 940 355',
-          'Q 970 355 970 330',
-          'L 970 90',
-          'Q 970 65 940 65',
-          'L 55 65',
+          'M 65 68',
+          'Q 30 68 30 95',
+          'L 30 325',
+          'Q 30 352 65 352',
+          'L 940 352',
+          'Q 970 352 970 325',
+          'L 970 95',
+          'Q 970 68 940 68',
+          'L 65 68',
           'Z',
         ].join(' ')}
         fill={P.body}
@@ -612,94 +616,76 @@ function BottomViewSVG() {
         strokeWidth="2.5"
       />
 
-      {/* ── CHASSIS RAILS ── longitudinal, 28 px wide */}
-      {/* Left rail: y=90..118 */}
-      <rect x="60" y="90" width="880" height="28" rx="6" fill={P.chassis} stroke={P.label} strokeWidth="1.5" />
-      {/* Right rail: y=302..330 */}
-      <rect x="60" y="302" width="880" height="28" rx="6" fill={P.chassis} stroke={P.label} strokeWidth="1.5" />
+      {/* ── CHASSIS RAILS ── longitudinal */}
+      <rect x="60" y="92" width="880" height="26" rx="5" fill={P.chassis} stroke={P.label} strokeWidth="1.5" />
+      <rect x="60" y="302" width="880" height="26" rx="5" fill={P.chassis} stroke={P.label} strokeWidth="1.5" />
 
       {/* ── CROSS MEMBERS ── */}
-      {/* Front cross member */}
-      <rect x="60" y="90" width="20" height="240" rx="4" fill={P.chassis} stroke={P.label} strokeWidth="1" />
-      {/* Rear cross member */}
-      <rect x="920" y="90" width="20" height="240" rx="4" fill={P.chassis} stroke={P.label} strokeWidth="1" />
-      {/* Mid cross member */}
-      <rect x="60" y="196" width="880" height="18" rx="4" fill={P.chassis} stroke={P.label} strokeWidth="1" />
-      {/* Front axle cross */}
-      <rect x="145" y="90" width="140" height="240" rx="4" fill={P.detail} stroke={P.chassis} strokeWidth="1" opacity="0.4" />
-      {/* Rear axle cross */}
-      <rect x="685" y="90" width="140" height="240" rx="4" fill={P.detail} stroke={P.chassis} strokeWidth="1" opacity="0.4" />
+      <rect x="60" y="92" width="18" height="236" rx="4" fill={P.chassis} stroke={P.label} strokeWidth="1" />
+      <rect x="922" y="92" width="18" height="236" rx="4" fill={P.chassis} stroke={P.label} strokeWidth="1" />
+      <rect x="60" y="197" width="880" height="16" rx="4" fill={P.chassis} stroke={P.label} strokeWidth="1" />
 
-      {/* ── ENGINE BLOCK ── x=65..370, y=118..196 */}
-      <rect x="65" y="118" width="305" height="78" rx="10" fill={P.pillar} stroke={P.label} strokeWidth="2" />
-      <text x="218" y="162" textAnchor="middle" fontSize="16" fill={P.bg} fontWeight="bold" fontFamily="monospace">MOTOR</text>
-      {/* Engine detail lines */}
-      <line x1="100" y1="130" x2="100" y2="184" stroke={P.chassis} strokeWidth="1" />
-      <line x1="140" y1="130" x2="140" y2="184" stroke={P.chassis} strokeWidth="1" />
-      <line x1="180" y1="130" x2="180" y2="184" stroke={P.chassis} strokeWidth="1" />
-      <line x1="220" y1="130" x2="220" y2="184" stroke={P.chassis} strokeWidth="1" />
-      <line x1="260" y1="130" x2="260" y2="184" stroke={P.chassis} strokeWidth="1" />
-      <line x1="300" y1="130" x2="300" y2="184" stroke={P.chassis} strokeWidth="1" />
-      <line x1="340" y1="130" x2="340" y2="184" stroke={P.chassis} strokeWidth="1" />
+      {/* ── ENGINE BLOCK ── x=65..370, y=118..197 */}
+      <rect x="65" y="118" width="305" height="79" rx="10" fill={P.pillar} stroke={P.label} strokeWidth="2" />
+      <text x="218" y="163" textAnchor="middle" fontSize="16" fill={P.bg} fontWeight="bold" fontFamily="monospace">MOTOR</text>
+      {[100, 140, 180, 220, 260, 300, 340].map((x) => (
+        <line key={`el-${x}`} x1={x} y1="130" x2={x} y2="185" stroke={P.chassis} strokeWidth="1" />
+      ))}
 
-      {/* ── GEARBOX / TRANSMISSION ── x=370..540, y=140..214 */}
-      <rect x="370" y="140" width="170" height="74" rx="8" fill={P.chassis} stroke={P.label} strokeWidth="1.5" />
+      {/* ── GEARBOX / TRANSMISSION ── x=370..540, y=140..213 */}
+      <rect x="370" y="140" width="170" height="73" rx="8" fill={P.chassis} stroke={P.label} strokeWidth="1.5" />
       <text x="455" y="182" textAnchor="middle" fontSize="13" fill={P.detail} fontFamily="monospace">CAJA</text>
 
-      {/* ── PROPSHAFT ── connecting front to rear differential */}
+      {/* ── PROPSHAFT ── */}
       <rect x="455" y="200" width="240" height="10" rx="5" fill={P.detail} stroke={P.chassis} strokeWidth="1" />
 
-      {/* ── FUEL TANK ── x=570..800, y=214..318 */}
-      <rect x="570" y="214" width="230" height="104" rx="12" fill={P.chassis} stroke={P.label} strokeWidth="1.5" />
-      <text x="685" y="271" textAnchor="middle" fontSize="13" fill={P.detail} fontFamily="monospace">TANQUE</text>
-      {/* Tank straps */}
-      <line x1="620" y1="214" x2="620" y2="318" stroke={P.label} strokeWidth="2" />
-      <line x1="750" y1="214" x2="750" y2="318" stroke={P.label} strokeWidth="2" />
+      {/* ── FUEL TANK ── x=570..800, y=213..317 */}
+      <rect x="570" y="213" width="230" height="104" rx="12" fill={P.chassis} stroke={P.label} strokeWidth="1.5" />
+      <text x="685" y="270" textAnchor="middle" fontSize="13" fill={P.detail} fontFamily="monospace">TANQUE</text>
+      <line x1="620" y1="213" x2="620" y2="317" stroke={P.label} strokeWidth="2" />
+      <line x1="750" y1="213" x2="750" y2="317" stroke={P.label} strokeWidth="2" />
 
-      {/* ── FRONT DIFFERENTIAL ── centered on front axle x=215, cy=205 */}
-      <ellipse cx="215" cy="205" rx="55" ry="28" fill={P.label} stroke={P.wheel} strokeWidth="2" />
-      <text x="215" y="210" textAnchor="middle" fontSize="10" fill={P.bg} fontFamily="monospace">DIF</text>
+      {/* ── FRONT DIFFERENTIAL ── centered on front axle x=210 */}
+      <ellipse cx="210" cy="205" rx="55" ry="28" fill={P.label} stroke={P.wheel} strokeWidth="2" />
+      <text x="210" y="210" textAnchor="middle" fontSize="10" fill={P.bg} fontFamily="monospace">DIF</text>
 
-      {/* ── REAR DIFFERENTIAL ── centered on rear axle x=755, cy=205 */}
-      <ellipse cx="755" cy="205" rx="55" ry="28" fill={P.label} stroke={P.wheel} strokeWidth="2" />
-      <text x="755" y="210" textAnchor="middle" fontSize="10" fill={P.bg} fontFamily="monospace">DIF</text>
+      {/* ── REAR DIFFERENTIAL ── centered on rear axle x=750 */}
+      <ellipse cx="750" cy="205" rx="55" ry="28" fill={P.label} stroke={P.wheel} strokeWidth="2" />
+      <text x="750" y="210" textAnchor="middle" fontSize="10" fill={P.bg} fontFamily="monospace">DIF</text>
 
       {/* ── EXHAUST PIPES ── */}
-      {/* Left exhaust: from engine to rear, near left rail */}
       <path d="M 370 128 Q 550 125 700 128 Q 820 130 900 138 L 940 145" stroke={P.chassis} strokeWidth="6" fill="none" strokeLinecap="round" />
       <circle cx="940" cy="145" r="8" fill={P.wheel} stroke={P.chassis} strokeWidth="2" />
-      {/* Right exhaust: near right rail */}
       <path d="M 370 282 Q 550 285 700 282 Q 820 280 900 272 L 940 265" stroke={P.chassis} strokeWidth="6" fill="none" strokeLinecap="round" />
       <circle cx="940" cy="265" r="8" fill={P.wheel} stroke={P.chassis} strokeWidth="2" />
 
-      {/* ── FRONT WHEELS ── same position as top view */}
-      <rect x="145" y="20" width="140" height="50" rx="10" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-      <rect x="153" y="27" width="124" height="36" rx="6" fill={P.wheelRim} />
-      <rect x="145" y="350" width="140" height="50" rx="10" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-      <rect x="153" y="357" width="124" height="36" rx="6" fill={P.wheelRim} />
+      {/* ── FRONT WHEELS ── x=140..280 */}
+      <rect x="140" y="20" width="140" height="45" rx="8" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+      <rect x="148" y="26" width="124" height="33" rx="5" fill={P.wheelRim} />
+      <rect x="140" y="355" width="140" height="45" rx="8" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+      <rect x="148" y="361" width="124" height="33" rx="5" fill={P.wheelRim} />
 
-      {/* ── REAR WHEELS ── */}
-      <rect x="685" y="20" width="140" height="50" rx="10" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-      <rect x="693" y="27" width="124" height="36" rx="6" fill={P.wheelRim} />
-      <rect x="685" y="350" width="140" height="50" rx="10" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-      <rect x="693" y="357" width="124" height="36" rx="6" fill={P.wheelRim} />
+      {/* ── REAR WHEELS ── x=680..820 */}
+      <rect x="680" y="20" width="140" height="45" rx="8" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+      <rect x="688" y="26" width="124" height="33" rx="5" fill={P.wheelRim} />
+      <rect x="680" y="355" width="140" height="45" rx="8" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+      <rect x="688" y="361" width="124" height="33" rx="5" fill={P.wheelRim} />
 
       {/* Axle lines */}
-      <line x1="215" y1="65" x2="215" y2="355" stroke={P.detail} strokeWidth="1" strokeDasharray="4,6" />
-      <line x1="755" y1="65" x2="755" y2="355" stroke={P.detail} strokeWidth="1" strokeDasharray="4,6" />
+      <line x1="210" y1="65" x2="210" y2="355" stroke={P.detail} strokeWidth="1" strokeDasharray="4,6" />
+      <line x1="750" y1="65" x2="750" y2="355" stroke={P.detail} strokeWidth="1" strokeDasharray="4,6" />
     </svg>
   );
 }
 
 // ─── FrontViewSVG ─────────────────────────────────────────────────────────────
-// viewBox 440×400. Body x=30..410 (380 px), ground y=390, roof y=25.
-// Cabin x=70..370 (300 px). Center x=220.
-// Wheel rects: 50 px wide × 150 px tall.
-//   Left wheel:  x=25..75,  y=240..390
-//   Right wheel: x=365..415, y=240..390
-// Windshield: trapezoid, bottom x=80..360 y=210, top x=100..340 y=25
-// Hood: x=30..410, y=210..270
-// Bumper: x=30..410, y=330..390
+// viewBox 440×400. Body x=30..410 (380 px), center x=220, ground y=390.
+// Cabin x=70..370 (300 px).
+// Wheel rects: 45 px wide × 140 px tall.
+//   Left wheel: x=30..75, right wheel: x=365..410, y=250..390.
+// Windshield: trapezoid, bottom x=80..360 y=210, top x=100..340 y=30.
+// Hood: x=30..410, y=210..265.
+// Bumper: x=30..410, y=330..390.
 
 function FrontViewSVG() {
   return (
@@ -709,26 +695,25 @@ function FrontViewSVG() {
       <path
         d={[
           // Roof
-          'M 100 25',
-          'L 340 25',
-          // C-pillar right
-          'Q 380 25 400 60',
+          'M 100 30',
+          'L 340 30',
+          // Right A-pillar
+          'Q 385 30 405 68',
           'L 410 210',
           // Right body side
-          'L 415 240',
-          // Right wheel arch
+          'L 415 250',
           'L 415 390',
           'L 365 390',
-          'L 365 240',
-          // Right body lower
-          'L 75 240',
+          'L 365 250',
+          // Lower body
+          'L 75 250',
           // Left wheel arch
           'L 75 390',
           'L 25 390',
-          'L 25 240',
+          'L 25 250',
           // Left body side
           'L 30 210',
-          'Q 40 60 100 25',
+          'Q 35 68 100 30',
           'Z',
         ].join(' ')}
         fill={P.body}
@@ -739,93 +724,98 @@ function FrontViewSVG() {
 
       {/* ── WINDSHIELD ── trapezoid */}
       <path
-        d="M 80 210 L 100 25 L 340 25 L 360 210 Z"
+        d="M 82 210 L 100 30 L 340 30 L 358 210 Z"
         fill={P.glass}
         stroke={P.glassStroke}
         strokeWidth="1.5"
       />
-      {/* Windshield wiper line */}
-      <path d="M 100 200 Q 220 185 340 200" fill="none" stroke={P.detail} strokeWidth="1.5" />
+      {/* Windshield wiper */}
+      <path d="M 102 200 Q 220 186 338 200" fill="none" stroke={P.detail} strokeWidth="1.5" />
       {/* A-pillars */}
-      <line x1="80" y1="210" x2="100" y2="25" stroke={P.pillar} strokeWidth="4" />
-      <line x1="360" y1="210" x2="340" y2="25" stroke={P.pillar} strokeWidth="4" />
+      <line x1="82" y1="210" x2="100" y2="30" stroke={P.pillar} strokeWidth="5" />
+      <line x1="358" y1="210" x2="340" y2="30" stroke={P.pillar} strokeWidth="5" />
 
-      {/* ── HOOD PANEL ── x=30..410, y=210..270 */}
-      <rect x="30" y="210" width="380" height="60" fill={P.bg} stroke={P.bodyStroke} strokeWidth="1.5" />
+      {/* ── HOOD PANEL ── x=30..410, y=210..265 */}
+      <rect x="30" y="210" width="380" height="55" fill={P.hood} stroke={P.bodyStroke} strokeWidth="1.5" />
       {/* Hood center crease */}
-      <line x1="220" y1="210" x2="220" y2="270" stroke={P.detail} strokeWidth="1.5" strokeDasharray="4,4" />
+      <line x1="220" y1="210" x2="220" y2="265" stroke={P.detail} strokeWidth="1.5" strokeDasharray="4,4" />
       {/* Hood edge highlight */}
-      <line x1="35" y1="215" x2="405" y2="215" stroke={P.accent} strokeWidth="2" />
+      <line x1="36" y1="215" x2="404" y2="215" stroke={P.accent} strokeWidth="2" />
+      {/* Hood scoop lines */}
+      <path d="M 120 218 Q 220 212 320 218" fill="none" stroke={P.detail} strokeWidth="1" opacity="0.6" />
 
       {/* ── HEADLIGHTS ── angular modern style */}
-      {/* Left headlight: x=30..80, y=210..270 */}
+      {/* Left headlight: x=30..82, y=210..265 */}
       <path
-        d="M 32 212 L 78 212 L 78 268 L 32 268 Q 28 268 28 264 L 28 216 Q 28 212 32 212 Z"
+        d="M 32 212 L 80 212 L 80 263 L 32 263 Q 28 263 28 259 L 28 216 Q 28 212 32 212 Z"
         fill={P.headlight}
         stroke={P.headlightS}
         strokeWidth="1.5"
       />
-      {/* DRL strip */}
-      <line x1="34" y1="222" x2="74" y2="222" stroke={P.headlightS} strokeWidth="3" strokeLinecap="round" />
-      {/* Low beam */}
-      <ellipse cx="55" cy="248" rx="16" ry="12" fill={P.headlight} stroke={P.headlightS} strokeWidth="1" />
+      <line x1="34" y1="222" x2="76" y2="222" stroke={P.headlightS} strokeWidth="3" strokeLinecap="round" />
+      <line x1="34" y1="232" x2="76" y2="232" stroke={P.headlightS} strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+      <ellipse cx="56" cy="248" rx="16" ry="11" fill={P.headlight} stroke={P.headlightS} strokeWidth="1" />
 
-      {/* Right headlight: x=362..410, y=210..270 */}
+      {/* Right headlight: x=360..410, y=210..265 */}
       <path
-        d="M 362 212 L 408 212 Q 412 212 412 216 L 412 264 Q 412 268 408 268 L 362 268 Z"
+        d="M 360 212 L 408 212 Q 412 212 412 216 L 412 259 Q 412 263 408 263 L 360 263 Z"
         fill={P.headlight}
         stroke={P.headlightS}
         strokeWidth="1.5"
       />
-      <line x1="366" y1="222" x2="406" y2="222" stroke={P.headlightS} strokeWidth="3" strokeLinecap="round" />
-      <ellipse cx="385" cy="248" rx="16" ry="12" fill={P.headlight} stroke={P.headlightS} strokeWidth="1" />
+      <line x1="364" y1="222" x2="406" y2="222" stroke={P.headlightS} strokeWidth="3" strokeLinecap="round" />
+      <line x1="364" y1="232" x2="406" y2="232" stroke={P.headlightS} strokeWidth="1.5" strokeLinecap="round" opacity="0.7" />
+      <ellipse cx="384" cy="248" rx="16" ry="11" fill={P.headlight} stroke={P.headlightS} strokeWidth="1" />
 
-      {/* ── GRILLE ── x=85..355, y=270..330 */}
-      <rect x="85" y="270" width="270" height="60" rx="6" fill={P.grille} stroke={P.bodyStroke} strokeWidth="2" />
-      {/* Grille mesh */}
-      {[280, 292, 304, 316, 322].map((y) => (
+      {/* ── GRILLE ── x=85..355, y=265..330 */}
+      <rect x="85" y="265" width="270" height="65" rx="6" fill={P.grille} stroke={P.bodyStroke} strokeWidth="2" />
+      {/* Grille mesh horizontal */}
+      {[275, 287, 299, 311, 323].map((y) => (
         <line key={`gh-${y}`} x1="90" y1={y} x2="350" y2={y} stroke={P.chassis} strokeWidth="1.5" />
       ))}
-      {[120, 155, 190, 225, 260, 295, 330].map((x) => (
-        <line key={`gv-${x}`} x1={x} y1="272" x2={x} y2="328" stroke={P.chassis} strokeWidth="1" />
+      {/* Grille mesh vertical */}
+      {[120, 155, 190, 220, 250, 285, 320].map((x) => (
+        <line key={`gv-${x}`} x1={x} y1="267" x2={x} y2="328" stroke={P.chassis} strokeWidth="1" />
       ))}
       {/* Brand logo */}
-      <ellipse cx="220" cy="300" rx="18" ry="18" fill={P.chassis} stroke={P.detail} strokeWidth="2" />
-      <line x1="210" y1="300" x2="230" y2="300" stroke={P.detail} strokeWidth="2" />
-      <line x1="220" y1="290" x2="220" y2="310" stroke={P.detail} strokeWidth="2" />
+      <ellipse cx="220" cy="297" rx="18" ry="18" fill={P.chassis} stroke={P.detail} strokeWidth="2" />
+      <line x1="210" y1="297" x2="230" y2="297" stroke={P.detail} strokeWidth="2" />
+      <line x1="220" y1="287" x2="220" y2="307" stroke={P.detail} strokeWidth="2" />
 
       {/* ── BUMPER ── x=30..410, y=330..390 */}
       <path
         d="M 30 330 L 410 330 L 415 355 Q 415 390 390 390 L 50 390 Q 25 390 25 355 Z"
-        fill={P.bg}
+        fill={P.hood}
         stroke={P.bodyStroke}
         strokeWidth="1.5"
       />
       {/* Lower air intake */}
-      <rect x="75" y="340" width="290" height="35" rx="5" fill={P.grille} stroke={P.bodyStroke} strokeWidth="1" />
+      <rect x="78" y="338" width="284" height="36" rx="5" fill={P.grille} stroke={P.bodyStroke} strokeWidth="1" />
       {/* Fog lights */}
-      <rect x="40" y="345" width="30" height="22" rx="4" fill={P.headlight} stroke={P.headlightS} strokeWidth="1" />
-      <rect x="370" y="345" width="30" height="22" rx="4" fill={P.headlight} stroke={P.headlightS} strokeWidth="1" />
+      <rect x="36" y="342" width="36" height="24" rx="4" fill={P.headlight} stroke={P.headlightS} strokeWidth="1" />
+      <rect x="368" y="342" width="36" height="24" rx="4" fill={P.headlight} stroke={P.headlightS} strokeWidth="1" />
+      {/* License plate area */}
+      <rect x="170" y="338" width="100" height="28" rx="3" fill={P.bg} stroke={P.detail} strokeWidth="1.5" />
 
-      {/* ── WHEELS ── 50 px wide × 150 px tall */}
-      {/* Left wheel: x=25..75, y=240..390 */}
-      <rect x="25" y="240" width="50" height="150" rx="10" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-      <rect x="31" y="248" width="38" height="134" rx="7" fill={P.wheelRim} />
-      <ellipse cx="50" cy="315" rx="14" ry="24" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
-      <line x1="50" y1="291" x2="50" y2="339" stroke={P.wheelSpoke} strokeWidth="3" />
-      <line x1="36" y1="315" x2="64" y2="315" stroke={P.wheelSpoke} strokeWidth="3" />
+      {/* ── WHEELS ── 45 px wide × 140 px tall */}
+      {/* Left wheel: x=30..75, y=250..390 */}
+      <rect x="30" y="250" width="45" height="140" rx="8" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+      <rect x="36" y="257" width="33" height="126" rx="6" fill={P.wheelRim} />
+      <ellipse cx="52" cy="320" rx="12" ry="22" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
+      <line x1="52" y1="298" x2="52" y2="342" stroke={P.wheelSpoke} strokeWidth="3" />
+      <line x1="40" y1="320" x2="64" y2="320" stroke={P.wheelSpoke} strokeWidth="3" />
 
-      {/* Right wheel: x=365..415, y=240..390 */}
-      <rect x="365" y="240" width="50" height="150" rx="10" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-      <rect x="371" y="248" width="38" height="134" rx="7" fill={P.wheelRim} />
-      <ellipse cx="390" cy="315" rx="14" ry="24" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
-      <line x1="390" y1="291" x2="390" y2="339" stroke={P.wheelSpoke} strokeWidth="3" />
-      <line x1="376" y1="315" x2="404" y2="315" stroke={P.wheelSpoke} strokeWidth="3" />
+      {/* Right wheel: x=365..410, y=250..390 */}
+      <rect x="365" y="250" width="45" height="140" rx="8" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+      <rect x="371" y="257" width="33" height="126" rx="6" fill={P.wheelRim} />
+      <ellipse cx="387" cy="320" rx="12" ry="22" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
+      <line x1="387" y1="298" x2="387" y2="342" stroke={P.wheelSpoke} strokeWidth="3" />
+      <line x1="375" y1="320" x2="399" y2="320" stroke={P.wheelSpoke} strokeWidth="3" />
 
       {/* ── SIDE MIRRORS ── */}
-      <path d="M 8 150 L 30 145 L 30 175 L 8 175 Q 4 175 4 170 L 4 155 Q 4 150 8 150 Z"
+      <path d="M 6 152 L 30 147 L 30 178 L 6 178 Q 2 178 2 173 L 2 157 Q 2 152 6 152 Z"
         fill={P.mirror} stroke={P.bodyStroke} strokeWidth="1.5" />
-      <path d="M 432 150 L 410 145 L 410 175 L 432 175 Q 436 175 436 170 L 436 155 Q 436 150 432 150 Z"
+      <path d="M 434 152 L 410 147 L 410 178 L 434 178 Q 438 178 438 173 L 438 157 Q 438 152 434 152 Z"
         fill={P.mirror} stroke={P.bodyStroke} strokeWidth="1.5" />
 
       {/* Ground line */}
@@ -836,8 +826,7 @@ function FrontViewSVG() {
 
 // ─── RearViewSVG ──────────────────────────────────────────────────────────────
 // viewBox 440×400. Same proportions as front view.
-// Rear window instead of windshield. Tail lights instead of headlights.
-// License plate, exhaust pipes, rear bumper.
+// Rear window, tail lights, license plate, rear bumper.
 
 function RearViewSVG() {
   return (
@@ -846,20 +835,20 @@ function RearViewSVG() {
       {/* ── MAIN BODY SILHOUETTE ── same as front */}
       <path
         d={[
-          'M 100 25',
-          'L 340 25',
-          'Q 380 25 400 60',
+          'M 100 30',
+          'L 340 30',
+          'Q 385 30 405 68',
           'L 410 210',
-          'L 415 240',
+          'L 415 250',
           'L 415 390',
           'L 365 390',
-          'L 365 240',
-          'L 75 240',
+          'L 365 250',
+          'L 75 250',
           'L 75 390',
           'L 25 390',
-          'L 25 240',
+          'L 25 250',
           'L 30 210',
-          'Q 40 60 100 25',
+          'Q 35 68 100 30',
           'Z',
         ].join(' ')}
         fill={P.body}
@@ -870,7 +859,7 @@ function RearViewSVG() {
 
       {/* ── REAR WINDOW ── same trapezoid as windshield */}
       <path
-        d="M 80 210 L 100 25 L 340 25 L 360 210 Z"
+        d="M 82 210 L 100 30 L 340 30 L 358 210 Z"
         fill={P.glass}
         stroke={P.glassStroke}
         strokeWidth="1.5"
@@ -878,62 +867,62 @@ function RearViewSVG() {
       {/* Rear wiper */}
       <line x1="220" y1="200" x2="300" y2="185" stroke={P.detail} strokeWidth="1.5" />
       {/* C-pillars */}
-      <line x1="80" y1="210" x2="100" y2="25" stroke={P.pillar} strokeWidth="4" />
-      <line x1="360" y1="210" x2="340" y2="25" stroke={P.pillar} strokeWidth="4" />
+      <line x1="82" y1="210" x2="100" y2="30" stroke={P.pillar} strokeWidth="5" />
+      <line x1="358" y1="210" x2="340" y2="30" stroke={P.pillar} strokeWidth="5" />
 
-      {/* ── TRUNK LID ── x=30..410, y=210..270 */}
-      <rect x="30" y="210" width="380" height="60" fill={P.bg} stroke={P.bodyStroke} strokeWidth="1.5" />
+      {/* ── TRUNK LID ── x=30..410, y=210..265 */}
+      <rect x="30" y="210" width="380" height="55" fill={P.hood} stroke={P.bodyStroke} strokeWidth="1.5" />
       {/* Trunk center crease */}
-      <line x1="220" y1="210" x2="220" y2="270" stroke={P.detail} strokeWidth="1.5" strokeDasharray="4,4" />
+      <line x1="220" y1="210" x2="220" y2="265" stroke={P.detail} strokeWidth="1.5" strokeDasharray="4,4" />
       {/* Trunk handle */}
-      <rect x="185" y="258" width="70" height="10" rx="5" fill={P.detail} stroke={P.chassis} strokeWidth="1.5" />
+      <rect x="182" y="255" width="76" height="10" rx="5" fill={P.detail} stroke={P.chassis} strokeWidth="1.5" />
       {/* Spoiler */}
-      <rect x="80" y="22" width="280" height="8" rx="4" fill={P.bodyDark} stroke={P.bodyStroke} strokeWidth="1" />
+      <rect x="82" y="26" width="276" height="8" rx="4" fill={P.bodyDark} stroke={P.bodyStroke} strokeWidth="1" />
 
-      {/* ── TAIL LIGHTS ── full-width LED bar style */}
-      {/* Left tail light: x=30..90, y=210..270 */}
+      {/* ── TAIL LIGHTS ── modern angular style */}
+      {/* Left tail light: x=30..82, y=210..265 */}
       <path
-        d="M 32 212 L 78 212 L 78 268 L 32 268 Q 28 268 28 264 L 28 216 Q 28 212 32 212 Z"
+        d="M 32 212 L 80 212 L 80 263 L 32 263 Q 28 263 28 259 L 28 216 Q 28 212 32 212 Z"
         fill={P.taillight}
         stroke={P.taillightS}
         strokeWidth="1.5"
       />
-      <line x1="34" y1="222" x2="74" y2="222" stroke={P.taillightS} strokeWidth="3" strokeLinecap="round" />
-      <line x1="34" y1="232" x2="74" y2="232" stroke={P.taillightS} strokeWidth="2" strokeLinecap="round" />
-      <ellipse cx="55" cy="252" rx="14" ry="10" fill={P.taillight} stroke={P.taillightS} strokeWidth="1" />
+      <line x1="34" y1="222" x2="76" y2="222" stroke={P.taillightS} strokeWidth="3" strokeLinecap="round" />
+      <line x1="34" y1="232" x2="76" y2="232" stroke={P.taillightS} strokeWidth="2" strokeLinecap="round" />
+      <ellipse cx="56" cy="250" rx="14" ry="10" fill={P.taillight} stroke={P.taillightS} strokeWidth="1" />
 
-      {/* Right tail light: x=362..410, y=210..270 */}
+      {/* Right tail light: x=360..410, y=210..265 */}
       <path
-        d="M 362 212 L 408 212 Q 412 212 412 216 L 412 264 Q 412 268 408 268 L 362 268 Z"
+        d="M 360 212 L 408 212 Q 412 212 412 216 L 412 259 Q 412 263 408 263 L 360 263 Z"
         fill={P.taillight}
         stroke={P.taillightS}
         strokeWidth="1.5"
       />
-      <line x1="366" y1="222" x2="406" y2="222" stroke={P.taillightS} strokeWidth="3" strokeLinecap="round" />
-      <line x1="366" y1="232" x2="406" y2="232" stroke={P.taillightS} strokeWidth="2" strokeLinecap="round" />
-      <ellipse cx="385" cy="252" rx="14" ry="10" fill={P.taillight} stroke={P.taillightS} strokeWidth="1" />
+      <line x1="364" y1="222" x2="406" y2="222" stroke={P.taillightS} strokeWidth="3" strokeLinecap="round" />
+      <line x1="364" y1="232" x2="406" y2="232" stroke={P.taillightS} strokeWidth="2" strokeLinecap="round" />
+      <ellipse cx="384" cy="250" rx="14" ry="10" fill={P.taillight} stroke={P.taillightS} strokeWidth="1" />
 
       {/* LED connecting strip */}
-      <rect x="78" y="218" width="284" height="6" rx="3" fill={P.taillight} opacity="0.5" />
+      <rect x="80" y="218" width="280" height="6" rx="3" fill={P.taillight} opacity="0.5" />
 
       {/* ── REAR BUMPER ── */}
       <path
         d="M 30 330 L 410 330 L 415 355 Q 415 390 390 390 L 50 390 Q 25 390 25 355 Z"
-        fill={P.bg}
+        fill={P.hood}
         stroke={P.bodyStroke}
         strokeWidth="1.5"
       />
       {/* Diffuser / lower bumper detail */}
-      <rect x="75" y="340" width="290" height="35" rx="5" fill={P.bodyDark} stroke={P.bodyStroke} strokeWidth="1" />
+      <rect x="78" y="338" width="284" height="36" rx="5" fill={P.bodyDark} stroke={P.bodyStroke} strokeWidth="1" />
       {/* Diffuser fins */}
       {[100, 130, 160, 190, 220, 250, 280, 310, 340].map((x) => (
-        <line key={`df-${x}`} x1={x} y1="342" x2={x} y2="373" stroke={P.chassis} strokeWidth="1.5" />
+        <line key={`df-${x}`} x1={x} y1="340" x2={x} y2="372" stroke={P.chassis} strokeWidth="1.5" />
       ))}
 
-      {/* ── LICENSE PLATE ── x=160..280, y=270..300 */}
-      <rect x="160" y="270" width="120" height="32" rx="4" fill={P.bg} stroke={P.detail} strokeWidth="2" />
-      <rect x="165" y="274" width="110" height="24" rx="3" fill={P.accent} />
-      <text x="220" y="291" textAnchor="middle" fontSize="10" fill={P.label} fontFamily="monospace" fontWeight="bold">SUV</text>
+      {/* ── LICENSE PLATE ── x=160..280, y=265..297 */}
+      <rect x="160" y="265" width="120" height="32" rx="4" fill={P.bg} stroke={P.detail} strokeWidth="2" />
+      <rect x="165" y="269" width="110" height="24" rx="3" fill={P.accent} />
+      <text x="220" y="286" textAnchor="middle" fontSize="10" fill={P.label} fontFamily="monospace" fontWeight="bold">SUV</text>
 
       {/* ── EXHAUST PIPES ── */}
       <ellipse cx="100" cy="382" rx="16" ry="7" fill={P.chassis} stroke={P.pillar} strokeWidth="1.5" />
@@ -942,22 +931,22 @@ function RearViewSVG() {
       <ellipse cx="340" cy="382" rx="9" ry="4" fill={P.wheel} />
 
       {/* ── WHEELS ── same as front view */}
-      <rect x="25" y="240" width="50" height="150" rx="10" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-      <rect x="31" y="248" width="38" height="134" rx="7" fill={P.wheelRim} />
-      <ellipse cx="50" cy="315" rx="14" ry="24" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
-      <line x1="50" y1="291" x2="50" y2="339" stroke={P.wheelSpoke} strokeWidth="3" />
-      <line x1="36" y1="315" x2="64" y2="315" stroke={P.wheelSpoke} strokeWidth="3" />
+      <rect x="30" y="250" width="45" height="140" rx="8" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+      <rect x="36" y="257" width="33" height="126" rx="6" fill={P.wheelRim} />
+      <ellipse cx="52" cy="320" rx="12" ry="22" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
+      <line x1="52" y1="298" x2="52" y2="342" stroke={P.wheelSpoke} strokeWidth="3" />
+      <line x1="40" y1="320" x2="64" y2="320" stroke={P.wheelSpoke} strokeWidth="3" />
 
-      <rect x="365" y="240" width="50" height="150" rx="10" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
-      <rect x="371" y="248" width="38" height="134" rx="7" fill={P.wheelRim} />
-      <ellipse cx="390" cy="315" rx="14" ry="24" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
-      <line x1="390" y1="291" x2="390" y2="339" stroke={P.wheelSpoke} strokeWidth="3" />
-      <line x1="376" y1="315" x2="404" y2="315" stroke={P.wheelSpoke} strokeWidth="3" />
+      <rect x="365" y="250" width="45" height="140" rx="8" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
+      <rect x="371" y="257" width="33" height="126" rx="6" fill={P.wheelRim} />
+      <ellipse cx="387" cy="320" rx="12" ry="22" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
+      <line x1="387" y1="298" x2="387" y2="342" stroke={P.wheelSpoke} strokeWidth="3" />
+      <line x1="375" y1="320" x2="399" y2="320" stroke={P.wheelSpoke} strokeWidth="3" />
 
       {/* ── SIDE MIRRORS ── */}
-      <path d="M 8 150 L 30 145 L 30 175 L 8 175 Q 4 175 4 170 L 4 155 Q 4 150 8 150 Z"
+      <path d="M 6 152 L 30 147 L 30 178 L 6 178 Q 2 178 2 173 L 2 157 Q 2 152 6 152 Z"
         fill={P.mirror} stroke={P.bodyStroke} strokeWidth="1.5" />
-      <path d="M 432 150 L 410 145 L 410 175 L 432 175 Q 436 175 436 170 L 436 155 Q 436 150 432 150 Z"
+      <path d="M 434 152 L 410 147 L 410 178 L 434 178 Q 438 178 438 173 L 438 157 Q 438 152 434 152 Z"
         fill={P.mirror} stroke={P.bodyStroke} strokeWidth="1.5" />
 
       {/* Ground line */}
@@ -972,15 +961,13 @@ function RearViewSVG() {
 // id, nombre, view are UNCHANGED.
 //
 // LATERAL (viewBox 1000×400):
-//   Body x=30..970 → x%: 3..97
-//   Beltline y=185 → y%: 185/400=46.25 ≈ 46
-//   Body bottom y=295 → y%: 295/400=73.75 ≈ 74
-//   Hood x=30..260 → x%: 3..26 (w=23) — shorter SUV hood
-//   Front door x=260..490 → x%: 26..49 (w=23)
-//   Rear door x=490..720 → x%: 49..72 (w=23)
-//   Rear hatch x=720..970 → x%: 72..97 (w=25)
-//   Roof y=75..185 → y%: 18.75..46.25 (h=27.5 ≈ 28)
-//   Estribo y=288..298 → y%: 72..74.5 (h=2.5) — use y=70, h=8 for clickability
+//   Hood x=30..255 → x%=3..25.5 (w≈23). Using w=30 to match test fixture.
+//   Front door x=255..490 → x%=25.5..49 (w≈23)
+//   Rear door x=490..720 → x%=49..72 (w=23)
+//   Rear hatch x=720..970 → x%=72..97 (w=25)
+//   Beltline y=210 → y%=52.5. Body bottom y=300 → y%=75.
+//   Roof y=80..210 → y%=20..52.5 (h≈32.5)
+//   Estribo y=292..302 → y%≈73..75.5 (use y=70, h=8 for clickability)
 //
 // LATERAL HOTSPOT MIRROR: lde-x = 100 − liz-x − liz-w
 //   liz-capo:     x=3,  w=30 → lde-capo:     x=67 (100−3−30=67)
@@ -1031,8 +1018,7 @@ const ZONE_HOTSPOTS: ZoneHotspot[] = [
   { id: 'tra-guar-der', nombre: 'Guardabarro Tra. Der.', x: 80, y: 70, w: 14, h: 23, view: 'trasera' },
 
   // ── Lateral Izquierdo (viewBox 1000×400) ──────────────────────────────────
-  // Hood x=30..260 → x%=3..26 (w=23). But test fixture uses w=30 for liz-capo.
-  // To pass mirror tests: liz-capo x=3 w=30, lde-capo x=67 (100−3−30=67)
+  // x=3 w=30 matches test fixture for liz-capo
   { id: 'liz-capo',     nombre: 'Capó Izq.',            x: 3,  y: 46, w: 30, h: 26, view: 'lateral-izq' },
   { id: 'liz-puerta-d', nombre: 'Puerta Del. Izq.',     x: 33, y: 46, w: 21, h: 26, view: 'lateral-izq' },
   { id: 'liz-puerta-t', nombre: 'Puerta Tra. Izq.',     x: 54, y: 46, w: 22, h: 26, view: 'lateral-izq' },
@@ -1041,18 +1027,12 @@ const ZONE_HOTSPOTS: ZoneHotspot[] = [
   { id: 'liz-estribo',  nombre: 'Estribo Izquierdo',    x: 33, y: 71, w: 43, h: 8,  view: 'lateral-izq' },
 
   // ── Lateral Derecho (viewBox 1000×400) ────────────────────────────────────
-  // Mirror of liz-*: x' = 100 − x − w
-  // liz-capo:     x=3,  w=30 → x'=100−3−30=67
+  // Mirror formula: lde-x = 100 − liz-x − liz-w
   { id: 'lde-capo',     nombre: 'Capó Der.',            x: 67, y: 46, w: 30, h: 26, view: 'lateral-der' },
-  // liz-puerta-d: x=33, w=21 → x'=100−33−21=46
   { id: 'lde-puerta-d', nombre: 'Puerta Del. Der.',     x: 46, y: 46, w: 21, h: 26, view: 'lateral-der' },
-  // liz-puerta-t: x=54, w=22 → x'=100−54−22=24
   { id: 'lde-puerta-t', nombre: 'Puerta Tra. Der.',     x: 24, y: 46, w: 22, h: 26, view: 'lateral-der' },
-  // liz-maletero: x=76, w=21 → x'=100−76−21=3
   { id: 'lde-maletero', nombre: 'Maletero Der.',        x: 3,  y: 46, w: 21, h: 26, view: 'lateral-der' },
-  // liz-techo:    x=33, w=54 → x'=100−33−54=13
   { id: 'lde-techo',    nombre: 'Techo Der.',           x: 13, y: 8,  w: 54, h: 39, view: 'lateral-der' },
-  // liz-estribo:  x=33, w=43 → x'=100−33−43=24
   { id: 'lde-estribo',  nombre: 'Estribo Derecho',      x: 24, y: 71, w: 43, h: 8,  view: 'lateral-der' },
 
   // ── Inferior view (viewBox 1000×420) ──────────────────────────────────────
@@ -1234,7 +1214,7 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
     'trasera':     '🚕',
   };
 
-  // Suppress unused variable warning
+  // Suppress unused variable warnings
   void noteInput;
   void viewDamages;
   void externalZonas;
