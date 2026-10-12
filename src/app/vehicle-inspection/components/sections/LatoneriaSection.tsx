@@ -1,5 +1,5 @@
 'use client';
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import type { ZonaVehiculoPDF } from '@/lib/inspectionPdfGenerator';
 
 export type { ZonaVehiculoPDF };
@@ -300,13 +300,13 @@ function SuvSideBodyDefs() {
         <circle cx="210" cy="300" r="70" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
         <circle cx="210" cy="300" r="55" fill={P.wheelRim} stroke={P.wheel} strokeWidth="1.5" />
         <circle cx="210" cy="300" r="20" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
-        {spokeAngles.map((angle) => (
+        {[0, 72, 144, 216, 288].map((angle) => (
           <line
             key={`lf-${angle}`}
-            x1={210 + R_INNER * Math.cos((angle * Math.PI) / 180)}
-            y1={300 + R_INNER * Math.sin((angle * Math.PI) / 180)}
-            x2={210 + R_OUTER * Math.cos((angle * Math.PI) / 180)}
-            y2={300 + R_OUTER * Math.sin((angle * Math.PI) / 180)}
+            x1={210 + 18 * Math.cos((angle * Math.PI) / 180)}
+            y1={300 + 18 * Math.sin((angle * Math.PI) / 180)}
+            x2={210 + 52 * Math.cos((angle * Math.PI) / 180)}
+            y2={300 + 52 * Math.sin((angle * Math.PI) / 180)}
             stroke={P.wheelSpoke}
             strokeWidth="5"
             strokeLinecap="round"
@@ -318,13 +318,13 @@ function SuvSideBodyDefs() {
         <circle cx="750" cy="300" r="70" fill={P.wheel} stroke={P.bodyStroke} strokeWidth="2" />
         <circle cx="750" cy="300" r="55" fill={P.wheelRim} stroke={P.wheel} strokeWidth="1.5" />
         <circle cx="750" cy="300" r="20" fill={P.chassis} stroke={P.wheelRim} strokeWidth="1.5" />
-        {spokeAngles.map((angle) => (
+        {[0, 72, 144, 216, 288].map((angle) => (
           <line
             key={`lr-${angle}`}
-            x1={750 + R_INNER * Math.cos((angle * Math.PI) / 180)}
-            y1={300 + R_INNER * Math.sin((angle * Math.PI) / 180)}
-            x2={750 + R_OUTER * Math.cos((angle * Math.PI) / 180)}
-            y2={300 + R_OUTER * Math.sin((angle * Math.PI) / 180)}
+            x1={750 + 18 * Math.cos((angle * Math.PI) / 180)}
+            y1={300 + 18 * Math.sin((angle * Math.PI) / 180)}
+            x2={750 + 52 * Math.cos((angle * Math.PI) / 180)}
+            y2={300 + 52 * Math.sin((angle * Math.PI) / 180)}
             stroke={P.wheelSpoke}
             strokeWidth="5"
             strokeLinecap="round"
@@ -455,15 +455,11 @@ function TopViewSVG() {
       {/* ── MAIN BODY OUTLINE ── tapered SUV shape */}
       <path
         d={[
-          // Front-left corner
           'M 65 68',
-          // Front bumper — slightly curved
           'Q 30 68 30 95',
           'L 30 325',
           'Q 30 352 65 352',
-          // Rear-left
           'L 940 352',
-          // Rear bumper
           'Q 970 352 970 325',
           'L 970 95',
           'Q 970 68 940 68',
@@ -694,24 +690,18 @@ function FrontViewSVG() {
       {/* ── MAIN BODY SILHOUETTE ── */}
       <path
         d={[
-          // Roof
           'M 100 30',
           'L 340 30',
-          // Right A-pillar
           'Q 385 30 405 68',
           'L 410 210',
-          // Right body side
           'L 415 250',
           'L 415 390',
           'L 365 390',
           'L 365 250',
-          // Lower body
           'L 75 250',
-          // Left wheel arch
           'L 75 390',
           'L 25 390',
           'L 25 250',
-          // Left body side
           'L 30 210',
           'Q 35 68 100 30',
           'Z',
@@ -1046,6 +1036,97 @@ const ZONE_HOTSPOTS: ZoneHotspot[] = [
   { id: 'inf-piso',         nombre: 'Piso / Carrocería',     x: 3,  y: 5,  w: 94, h: 90, view: 'inferior' },
 ];
 
+// ─── Zone lookup map (stable reference, never recomputed) ────────────────────
+const ZONE_BY_ID = new Map<string, ZoneHotspot>(ZONE_HOTSPOTS.map((z) => [z.id, z]));
+
+// ─── Adapters: ZonaVehiculoPDF ↔ DamageEntry ─────────────────────────────────
+// These adapters maintain full compatibility with existing saved inspection records.
+// The mapping is intentionally conservative: unknown tipos default to 'rayon'.
+
+function pdfTipoToDanoTipo(tipo: ZonaVehiculoPDF['tipo']): DanoTipo {
+  switch (tipo) {
+    case 'bueno':       return 'sin-dano';
+    case 'rayado':      return 'rayon';
+    case 'golpe-leve':  return 'golpe';
+    case 'golpe-fuerte':return 'abolladura';
+    default:            return tipo ? 'rayon' : null;
+  }
+}
+
+function danoTipoToPdfTipo(tipo: DanoTipo): ZonaVehiculoPDF['tipo'] {
+  switch (tipo) {
+    case 'sin-dano':   return 'bueno';
+    case 'rayon':      return 'rayado';
+    case 'golpe':      return 'golpe-leve';
+    case 'abolladura': return 'golpe-fuerte';
+    case 'pintura':    return 'rayado';
+    default:           return null;
+  }
+}
+
+/**
+ * Normalize ZonaVehiculoPDF[] into DamageEntry[].
+ * One ZonaVehiculoPDF → one DamageEntry (one damage record per zone per load).
+ * Zones with tipo=null or tipo='bueno' and no notes/photos are skipped.
+ * Historical IDs are preserved exactly.
+ */
+function normalizePdfZonas(zonas: ZonaVehiculoPDF[]): DamageEntry[] {
+  const entries: DamageEntry[] = [];
+  for (const zona of zonas) {
+    if (!zona.id) continue;
+    const tipo = pdfTipoToDanoTipo(zona.tipo);
+    // Skip zones with no damage and no notes/photos
+    if (tipo === null && !zona.notas && (!zona.fotos || zona.fotos.length === 0)) continue;
+    const hotspot = ZONE_BY_ID.get(zona.id);
+    // Determine view from hotspot catalogue; fall back to 'superior' for unknown IDs
+    const view: VehicleView = hotspot?.view ?? 'superior';
+    entries.push({
+      id: `dmg-ext-${zona.id}`,
+      zonaId: zona.id,
+      zonaNombre: zona.nombre || hotspot?.nombre || zona.id,
+      tipo,
+      notas: zona.notas || '',
+      fotos: zona.fotos || [],
+      timestamp: new Date().toISOString(),
+      view,
+      x: hotspot ? hotspot.x + hotspot.w / 2 : 50,
+      y: hotspot ? hotspot.y + hotspot.h / 2 : 50,
+    });
+  }
+  return entries;
+}
+
+/**
+ * Serialize DamageEntry[] → ZonaVehiculoPDF[].
+ * Multiple damage entries for the same zone are merged: last tipo wins,
+ * notes are concatenated with '; ', photos are combined.
+ * This preserves backward compatibility with ZonaVehiculoPDF[].
+ */
+function serializeDamagesToPdf(damages: DamageEntry[]): ZonaVehiculoPDF[] {
+  const zonaMap = new Map<string, ZonaVehiculoPDF>();
+  for (const d of damages) {
+    const existing = zonaMap.get(d.zonaId);
+    if (!existing) {
+      zonaMap.set(d.zonaId, {
+        id: d.zonaId,
+        nombre: d.zonaNombre,
+        tipo: danoTipoToPdfTipo(d.tipo),
+        notas: d.notas,
+        fotos: [...d.fotos],
+      });
+    } else {
+      // Merge: last tipo wins, notes concatenated, photos combined
+      zonaMap.set(d.zonaId, {
+        ...existing,
+        tipo: danoTipoToPdfTipo(d.tipo) ?? existing.tipo,
+        notas: [existing.notas, d.notas].filter(Boolean).join('; '),
+        fotos: [...existing.fotos, ...d.fotos],
+      });
+    }
+  }
+  return Array.from(zonaMap.values());
+}
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatTimestamp(ts: string): string {
@@ -1058,48 +1139,54 @@ function formatTimestamp(ts: string): string {
   }
 }
 
-function damagesForView(damages: DamageEntry[], view: VehicleView): DamageEntry[] {
-  return damages.filter((d) => d.view === view);
-}
-
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function LatoneriaSection({ zonas: externalZonas, onChange, inspectorId }: LatoneriaSectionProps) {
   const [activeView, setActiveView] = useState<VehicleView>('superior');
   const [selectedTool, setSelectedTool] = useState<DanoTipo>('rayon');
-  const [damages, setDamages] = useState<DamageEntry[]>([]);
+  const [damages, setDamages] = useState<DamageEntry[]>(() => {
+    // Initialize from externalZonas on first mount
+    if (externalZonas && externalZonas.length > 0) {
+      return normalizePdfZonas(externalZonas);
+    }
+    return [];
+  });
   const [selectedDamageId, setSelectedDamageId] = useState<string | null>(null);
-  const [noteInput, setNoteInput] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Track whether the current damages were set by the user (local) or loaded externally.
+  // This prevents overwriting user edits when the parent re-renders with the same data.
+  const isLocalEdit = useRef(false);
+  // Track the last serialized value we sent to onChange to avoid redundant calls.
+  const lastSyncedRef = useRef<string>('');
+
+  // ── Sync external → internal ──────────────────────────────────────────────
+  // When externalZonas changes (e.g., inspection reload), re-initialize damages
+  // ONLY if the change comes from outside (not from our own onChange call).
+  useEffect(() => {
+    if (isLocalEdit.current) {
+      // This update was triggered by our own onChange — skip to avoid overwrite
+      isLocalEdit.current = false;
+      return;
+    }
+    if (!externalZonas) return;
+    const normalized = normalizePdfZonas(externalZonas);
+    // Only update if the external data actually differs from current state
+    const externalKey = externalZonas.map((z) => `${z.id}:${z.tipo}:${z.notas}`).join('|');
+    if (externalKey === lastSyncedRef.current) return;
+    setDamages(normalized);
+    setSelectedDamageId(null);
+  }, [externalZonas]);
+
+  // ── Sync internal → external ──────────────────────────────────────────────
   const syncExternal = useCallback((newDamages: DamageEntry[]) => {
     if (!onChange) return;
-    const zonaMap = new Map<string, ZonaVehiculoPDF>();
-    newDamages.forEach((d) => {
-      const existing = zonaMap.get(d.zonaId);
-      const tipoMapped = d.tipo === 'sin-dano' ? 'bueno'
-        : d.tipo === 'rayon' ? 'rayado'
-          : d.tipo === 'golpe' ? 'golpe-leve'
-            : d.tipo === 'abolladura' ? 'golpe-fuerte'
-              : d.tipo === 'pintura' ? 'rayado'
-                : null;
-      if (!existing) {
-        zonaMap.set(d.zonaId, {
-          id: d.zonaId,
-          nombre: d.zonaNombre,
-          tipo: tipoMapped,
-          notas: d.notas,
-          fotos: d.fotos,
-        });
-      } else {
-        zonaMap.set(d.zonaId, {
-          ...existing,
-          fotos: [...existing.fotos, ...d.fotos],
-          notas: existing.notas ? existing.notas + '; ' + d.notas : d.notas,
-        });
-      }
-    });
-    onChange(Array.from(zonaMap.values()));
+    const serialized = serializeDamagesToPdf(newDamages);
+    const key = serialized.map((z) => `${z.id}:${z.tipo}:${z.notas}`).join('|');
+    if (key === lastSyncedRef.current) return; // no-op: data unchanged
+    lastSyncedRef.current = key;
+    isLocalEdit.current = true; // mark as local to prevent re-init on next externalZonas update
+    onChange(serialized);
   }, [onChange]);
 
   const addDamage = (zone: ZoneHotspot) => {
@@ -1198,10 +1285,13 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
   };
 
   const selectedDamage = damages.find((d) => d.id === selectedDamageId) || null;
-  const viewDamages = damagesForView(damages, activeView);
 
   const getZoneDamage = (zoneId: string): DamageEntry | undefined =>
     damages.find((d) => d.zonaId === zoneId && d.view === activeView);
+
+  // Count all damages per zone across all views (for summary indicator)
+  const getZoneDamageCount = (zoneId: string): number =>
+    damages.filter((d) => d.zonaId === zoneId).length;
 
   const currentViewZones = ZONE_HOTSPOTS.filter((z) => z.view === activeView);
 
@@ -1213,11 +1303,6 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
     'frontal':     '🚖',
     'trasera':     '🚕',
   };
-
-  // Suppress unused variable warnings
-  void noteInput;
-  void viewDamages;
-  void externalZonas;
 
   return (
     <div className="space-y-3">
@@ -1247,20 +1332,29 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
 
           {/* LEFT SIDEBAR — View selectors */}
           <div className="lg:w-44 border-b lg:border-b-0 lg:border-r border-gray-100 p-3 flex lg:flex-col gap-2 overflow-x-auto lg:overflow-x-visible">
-            {VIEWS.map((view) => (
-              <button
-                key={view.id}
-                type="button"
-                onClick={() => setActiveView(view.id)}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                  activeView === view.id
-                    ? 'bg-blue-50 text-blue-700 border border-blue-200 font-semibold' :'text-gray-600 hover:bg-gray-50 border border-transparent'
-                }`}
-              >
-                <span className="text-base">{viewIcons[view.id]}</span>
-                <span className="text-xs">{view.label}</span>
-              </button>
-            ))}
+            {VIEWS.map((view) => {
+              // Count damages in this view
+              const viewDmgCount = damages.filter((d) => d.view === view.id).length;
+              return (
+                <button
+                  key={view.id}
+                  type="button"
+                  onClick={() => setActiveView(view.id)}
+                  className={`flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
+                    activeView === view.id
+                      ? 'bg-blue-50 text-blue-700 border border-blue-200 font-semibold' :'text-gray-600 hover:bg-gray-50 border border-transparent'
+                  }`}
+                >
+                  <span className="text-base">{viewIcons[view.id]}</span>
+                  <span className="text-xs flex-1">{view.label}</span>
+                  {viewDmgCount > 0 && (
+                    <span className="ml-auto text-xs font-bold bg-red-100 text-red-600 rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
+                      {viewDmgCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* CENTER — Vehicle diagram */}
@@ -1281,11 +1375,13 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
                 {currentViewZones.map((zone) => {
                   const dmg = getZoneDamage(zone.id);
                   const cfg = dmg?.tipo ? DAMAGE_CONFIG[dmg.tipo] : null;
+                  const totalCount = getZoneDamageCount(zone.id);
                   return (
                     <button
                       key={zone.id}
                       type="button"
                       title={zone.nombre}
+                      aria-label={`${zone.nombre}${dmg ? ` — ${cfg?.label}` : ''}`}
                       onClick={() => {
                         if (selectedTool === null) {
                           handleEraseZone(zone);
@@ -1313,6 +1409,12 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
                           style={{ backgroundColor: cfg?.color }}
                         />
                       )}
+                      {/* Multi-view damage count badge */}
+                      {totalCount > 1 && (
+                        <div className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-gray-800 text-white text-xs flex items-center justify-center font-bold leading-none">
+                          {totalCount}
+                        </div>
+                      )}
                       {/* Hover label */}
                       <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-0.5 bg-gray-900 text-white text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                         {zone.nombre}
@@ -1326,8 +1428,13 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
 
           {/* RIGHT PANEL — Daños registrados */}
           <div className="lg:w-64 border-t lg:border-t-0 lg:border-l border-gray-100 flex flex-col">
-            <div className="p-3 border-b border-gray-100">
+            <div className="p-3 border-b border-gray-100 flex items-center justify-between">
               <h4 className="text-sm font-bold text-gray-800">Daños registrados</h4>
+              {damages.length > 0 && (
+                <span className="text-xs font-bold bg-red-100 text-red-600 rounded-full px-2 py-0.5">
+                  {damages.length}
+                </span>
+              )}
             </div>
             <div className="flex-1 overflow-y-auto p-2 space-y-2 max-h-80 lg:max-h-none">
               {damages.length === 0 ? (
@@ -1357,12 +1464,13 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
                         </div>
                         <div className="flex items-center gap-1 flex-shrink-0">
                           {dmg.fotos[0] && (
-                            <img src={dmg.fotos[0]} alt="preview" className="w-10 h-10 rounded-lg object-cover border border-gray-200" />
+                            <img src={dmg.fotos[0]} alt={`Foto del daño en ${dmg.zonaNombre}`} className="w-10 h-10 rounded-lg object-cover border border-gray-200" />
                           )}
                           <button
                             type="button"
                             onClick={(e) => { e.stopPropagation(); deleteDamage(dmg.id); }}
                             className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                            aria-label={`Eliminar daño en ${dmg.zonaNombre}`}
                           >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -1461,13 +1569,14 @@ export default function LatoneriaSection({ zonas: externalZonas, onChange, inspe
                       <div key={idx} className="relative group">
                         <img
                           src={foto}
-                          alt={`Foto ${idx + 1} del daño`}
+                          alt={`Foto ${idx + 1} del daño en ${selectedDamage.zonaNombre}`}
                           className="w-20 h-20 object-cover rounded-xl border border-gray-200"
                         />
                         <button
                           type="button"
                           onClick={() => removePhoto(selectedDamage.id, idx)}
                           className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow"
+                          aria-label={`Eliminar foto ${idx + 1}`}
                         >
                           ×
                         </button>
