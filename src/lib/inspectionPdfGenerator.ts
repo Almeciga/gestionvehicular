@@ -227,7 +227,6 @@ async function convertImageToBase64(
     img.crossOrigin = 'anonymous';
 
     const onLoad = () => {
-      signal?.removeEventListener('abort', onAbort);
       try {
         const canvas = document.createElement('canvas');
         const maxW = 1600;
@@ -244,6 +243,7 @@ async function convertImageToBase64(
       } catch {
         resolve(null);
       }
+      signal?.removeEventListener('abort', onAbort);
     };
 
     const onError = () => {

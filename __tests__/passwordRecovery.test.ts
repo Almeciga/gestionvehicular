@@ -5,6 +5,8 @@
 
 /// <reference types="jest" />
 
+import { describe, it, expect } from '@jest/globals';
+
 // ─── Password validation helper (extracted from reset-password page) ──────────
 
 function validatePassword(pwd: string): { valid: boolean; errors: string[] } {
