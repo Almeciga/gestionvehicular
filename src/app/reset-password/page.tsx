@@ -1,15 +1,27 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/lib/supabase/client';
 import AppLogo from '@/components/ui/AppLogo';
 import AppIcon from '@/components/ui/AppIcon';
 import { toast } from 'sonner';
 
-export default function ResetPasswordPage() {
+// Password strength validation
+function validatePassword(pwd: string): { valid: boolean; errors: string[] } {
+  const errors: string[] = [];
+  if (pwd.length < 8) errors.push('Al menos 8 caracteres');
+  if (!/[a-z]/.test(pwd)) errors.push('Al menos una letra minúscula');
+  if (!/[A-Z]/.test(pwd)) errors.push('Al menos una letra mayúscula');
+  if (!/\d/.test(pwd)) errors.push('Al menos un número');
+  return { valid: errors.length === 0, errors };
+}
+
+function ResetPasswordInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const linkError = searchParams?.get('error');
   const { user, profile, refreshProfile, loading } = useAuth();
   const supabase = createClient();
 
@@ -17,59 +29,63 @@ export default function ResetPasswordPage() {
   const [confirm, setConfirm] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [saving, setSaving] = useState(false);
-  // Track if we just completed a reset to avoid redirect loop
   const justReset = useRef(false);
 
-  useEffect(() => {
-    // Don't redirect while still loading auth state
-    if (loading) return;
+  const { valid: pwdValid, errors: pwdErrors } = validatePassword(password);
+  const confirmMatch = password === confirm;
 
-    // No user at all — go to login
+  useEffect(() => {
+    if (loading) return;
     if (!user) {
       router.replace('/login');
       return;
     }
-
-    // If profile is loaded, must_reset_password is false, and we didn't just reset,
-    // this user shouldn't be here — redirect to app
     if (profile && !profile.must_reset_password && !justReset.current) {
       router.replace('/vehicle-inspection');
     }
-  }, [loading, user, profile]);
+  }, [loading, user, profile, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password.length < 8) {
-      toast.error('La contraseña debe tener al menos 8 caracteres');
+
+    if (!pwdValid) {
+      toast.error('La contraseña no cumple los requisitos mínimos');
       return;
     }
-    if (password !== confirm) {
+    if (!confirmMatch) {
       toast.error('Las contraseñas no coinciden');
       return;
     }
+
     setSaving(true);
     try {
       const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
+      if (error) {
+        // Handle specific Supabase errors
+        if (error.message?.toLowerCase().includes('same password')) {
+          toast.error('La nueva contraseña debe ser diferente a la actual');
+          return;
+        }
+        throw error;
+      }
 
-      // Clear must_reset_password flag in profiles table
+      // Clear must_reset_password flag
       const { error: profileError } = await supabase
         .from('profiles')
         .update({ must_reset_password: false })
         .eq('id', user?.id);
 
       if (profileError) {
-        console.error('Error clearing must_reset_password:', profileError);
+        console.error('[ResetPassword] Error clearing must_reset_password:', profileError);
       }
 
-      // Mark that we just reset so the useEffect guard doesn't fire prematurely
       justReset.current = true;
-
       await refreshProfile();
       toast.success('Contraseña actualizada correctamente. ¡Bienvenido!');
       router.replace('/vehicle-inspection');
-    } catch (err: any) {
-      toast.error(err?.message || 'Error al actualizar contraseña');
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error al actualizar contraseña';
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
@@ -83,6 +99,34 @@ export default function ResetPasswordPage() {
     );
   }
 
+  // Expired / invalid link state
+  if (linkError === 'link_expired') {
+    return (
+      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
+        <div className="w-full max-w-sm">
+          <div className="bg-white rounded-2xl shadow-sm border border-red-200 p-6 text-center">
+            <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+              <AppIcon name="ExclamationCircleIcon" size={28} className="text-red-500" />
+            </div>
+            <h2 className="text-lg font-bold text-gray-800 mb-2">Enlace expirado o inválido</h2>
+            <p className="text-sm text-gray-600 mb-5">
+              El enlace de recuperación ha expirado o ya fue utilizado. Por favor solicita uno nuevo.
+            </p>
+            <a
+              href="/forgot-password"
+              className="block w-full py-3 bg-[#1B4F72] text-white font-bold rounded-xl text-sm text-center hover:bg-[#154060] transition-colors"
+            >
+              Solicitar nuevo enlace
+            </a>
+            <a href="/login" className="block mt-3 text-xs text-gray-500 underline">
+              Volver al inicio de sesión
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-sm">
@@ -91,15 +135,19 @@ export default function ResetPasswordPage() {
             <AppLogo size={40} className="brightness-0 invert" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900">GestionVehicular</h1>
-          <p className="text-sm text-gray-500 mt-1">Cambio de contraseña requerido</p>
+          <p className="text-sm text-gray-500 mt-1">Cambio de contraseña</p>
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-amber-200 p-6">
           <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3 mb-5">
             <AppIcon name="ExclamationTriangleIcon" size={20} className="text-amber-600 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-semibold text-amber-800">Cambio de contraseña obligatorio</p>
-              <p className="text-xs text-amber-700 mt-0.5">Por seguridad, debes establecer una nueva contraseña antes de continuar. Usa una contraseña fuerte con al menos 8 caracteres.</p>
+              <p className="text-sm font-semibold text-amber-800">
+                {profile?.must_reset_password ? 'Cambio de contraseña obligatorio' : 'Nueva contraseña'}
+              </p>
+              <p className="text-xs text-amber-700 mt-0.5">
+                Establece una contraseña segura con al menos 8 caracteres, mayúsculas, minúsculas y números.
+              </p>
             </div>
           </div>
 
@@ -119,7 +167,7 @@ export default function ResetPasswordPage() {
                   placeholder="Mínimo 8 caracteres"
                   className="w-full pl-10 pr-12 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4F72]/30 focus:border-[#1B4F72] bg-gray-50"
                   disabled={saving}
-                  minLength={8}
+                  autoComplete="new-password"
                 />
                 <button
                   type="button"
@@ -143,20 +191,27 @@ export default function ResetPasswordPage() {
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   placeholder="Repite la contraseña"
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#1B4F72]/30 focus:border-[#1B4F72] bg-gray-50"
+                  className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm focus:outline-none focus:ring-2 bg-gray-50 ${
+                    confirm && !confirmMatch
+                      ? 'border-red-300 focus:ring-red-200' :'border-gray-200 focus:ring-[#1B4F72]/30 focus:border-[#1B4F72]'
+                  }`}
                   disabled={saving}
+                  autoComplete="new-password"
                 />
               </div>
+              {confirm && !confirmMatch && (
+                <p className="text-xs text-red-500 mt-1">Las contraseñas no coinciden</p>
+              )}
             </div>
 
-            {/* Password strength hints */}
+            {/* Password strength indicators */}
             <div className="bg-gray-50 rounded-xl p-3 space-y-1">
-              <p className="text-xs font-semibold text-gray-600 mb-1.5">Recomendaciones de seguridad:</p>
+              <p className="text-xs font-semibold text-gray-600 mb-1.5">Requisitos de seguridad:</p>
               {[
                 { label: 'Al menos 8 caracteres', ok: password.length >= 8 },
                 { label: 'Letras mayúsculas y minúsculas', ok: /[a-z]/.test(password) && /[A-Z]/.test(password) },
                 { label: 'Al menos un número', ok: /\d/.test(password) },
-                { label: 'Al menos un símbolo (!@#$...)', ok: /[^a-zA-Z0-9]/.test(password) },
+                { label: 'Las contraseñas coinciden', ok: !!confirm && confirmMatch },
               ].map((hint) => (
                 <div key={hint.label} className="flex items-center gap-2">
                   <AppIcon
@@ -171,7 +226,7 @@ export default function ResetPasswordPage() {
 
             <button
               type="submit"
-              disabled={saving}
+              disabled={saving || !pwdValid || !confirmMatch}
               className="w-full bg-[#1B4F72] text-white py-3 rounded-xl font-semibold text-sm hover:bg-[#154060] transition-colors disabled:opacity-60 flex items-center justify-center gap-2 mt-2"
             >
               {saving ? (
@@ -193,5 +248,17 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="animate-spin w-8 h-8 border-4 border-[#1B4F72] border-t-transparent rounded-full" />
+      </div>
+    }>
+      <ResetPasswordInner />
+    </Suspense>
   );
 }

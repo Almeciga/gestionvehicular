@@ -1,5 +1,3 @@
-import Dexie, { type Table } from 'dexie';
-
 // ─── Table Interfaces ─────────────────────────────────────────────────────────
 
 export interface DBProfile {
@@ -23,13 +21,15 @@ export interface DBVehicle {
   vin?: string;
   propietario: string;
   fecha_creacion?: string;
+  cantidad_puestos?: number;
+  cantidad_ejes?: number;
   materials?: unknown[];
   created_by?: string;
   created_at: string;
   updated_at: string;
   local_id?: string;
   _synced_at?: number;
-  _dirty?: boolean; // true = has local changes not yet synced
+  _dirty?: boolean;
 }
 
 export interface DBMaterial {
@@ -131,70 +131,270 @@ export interface DBSyncMeta {
   last_sync: number; // unix timestamp ms
 }
 
-// ─── Dexie Database ───────────────────────────────────────────────────────────
+// ─── PO Type Interfaces ───────────────────────────────────────────────────────
 
-class GVDatabase extends Dexie {
-  profiles!: Table<DBProfile, string>;
-  vehicles!: Table<DBVehicle, string>;
-  materials!: Table<DBMaterial, string>;
-  inspections!: Table<DBInspection, string>;
-  sync_queue!: Table<DBSyncQueueItem, number>;
-  sync_meta!: Table<DBSyncMeta, string>;
-  error_logs!: Table<DBErrorLog, string>;
-
-  constructor() {
-    super('gv_enterprise_db');
-
-    this.version(1).stores({
-      profiles: 'id, email, role, is_active, updated_at',
-      vehicles: 'id, placa, marca, propietario, created_by, updated_at, _dirty',
-      materials: 'id, nombre, categoria, updated_at, _dirty',
-      inspections: 'id, placa, inspector_id, status, updated_at, local_id, _dirty',
-      sync_queue: '++id, table_name, operation, record_id, status, created_at',
-      sync_meta: 'id',
-    });
-
-    this.version(2).stores({
-      profiles: 'id, email, role, is_active, updated_at',
-      vehicles: 'id, placa, marca, propietario, created_by, updated_at, _dirty',
-      materials: 'id, nombre, categoria, updated_at, _dirty',
-      inspections: 'id, placa, inspector_id, status, updated_at, local_id, _dirty',
-      sync_queue: '++id, table_name, operation, record_id, status, created_at',
-      sync_meta: 'id',
-      error_logs: 'id, level, created_at, context',
-    });
-
-    // v3: soporte de concurrencia optimista (version) y estado de conflicto
-    this.version(3)
-      .stores({
-        profiles: 'id, email, role, is_active, updated_at',
-        vehicles: 'id, placa, marca, propietario, created_by, updated_at, _dirty',
-        materials: 'id, nombre, categoria, updated_at, _dirty',
-        inspections: 'id, placa, inspector_id, status, updated_at, local_id, _dirty, sync_status',
-        sync_queue: '++id, table_name, operation, record_id, status, created_at',
-        sync_meta: 'id',
-        error_logs: 'id, level, created_at, context',
-      })
-      .upgrade(async (tx) => {
-        // Registros existentes no tienen version todavía: asumimos 1 (recién sincronizados)
-        await tx
-          .table('inspections')
-          .toCollection()
-          .modify((insp: DBInspection) => {
-            if (insp.version === undefined) insp.version = 1;
-            if (insp.base_version === undefined) insp.base_version = insp.version;
-          });
-      });
-  }
+export interface DBPOCliente {
+  id: string;
+  nombre: string;
+  pais?: string;
+  activo?: boolean;
+  created_at?: string;
+  [key: string]: unknown;
 }
 
-// Singleton instance
-let _db: GVDatabase | null = null;
+export interface DBPOCatalogItem {
+  id: string;
+  nombre: string;
+  codigo?: string;
+  abreviatura?: string;
+  orden?: number;
+  activo?: boolean;
+  created_at?: string;
+  [key: string]: unknown;
+}
 
-export function getDB(): GVDatabase {
-  if (!_db) {
-    _db = new GVDatabase();
+export interface DBPOPiezaVidrio {
+  id: string;
+  nombre: string;
+  codigo?: string;
+  activo?: boolean;
+  created_at?: string;
+  [key: string]: unknown;
+}
+
+export interface DBVehicleBrand {
+  id: string;
+  nombre: string;
+  categoria: string;
+  pais_origen?: string;
+  activo?: boolean;
+  created_at?: string;
+}
+
+export interface DBVehicleDocument {
+  id: string;
+  vehicle_id: string;
+  tipo: 'soat' | 'tecno' | 'seguro_todo_riesgo' | 'tarjeta_propiedad' | 'licencia_conduccion' | 'tarjeta_transito';
+  estado: 'pendiente' | 'cargado' | 'vencido' | 'por_vencer';
+  fecha_vencimiento?: string;
+  archivo_url?: string;
+  archivo_mime?: string;
+  notas?: string;
+  uploaded_by?: string;
+  created_at: string;
+  updated_at: string;
+  _synced_at?: number;
+  _dirty?: boolean;
+}
+
+export interface DBTrabajo {
+  id: string;
+  vehicle_id: string;
+  descripcion: string;
+  parte_vehiculo?: string;
+  fecha_inicio: string;
+  fecha_fin?: string;
+  estado: 'pendiente' | 'en_ejecucion' | 'finalizado';
+  responsable?: string;
+  observaciones?: string;
+  materiales?: unknown[];
+  herramientas?: unknown[];
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+  _synced_at?: number;
+  _dirty?: boolean;
+}
+
+export interface DBHerramienta {
+  id: string;
+  nombre: string;
+  categoria: string;
+  estado: 'disponible' | 'en_uso' | 'mantenimiento' | 'baja';
+  descripcion?: string;
+  codigo?: string;
+  activo?: boolean;
+  created_by?: string;
+  created_at: string;
+  updated_at: string;
+  _synced_at?: number;
+  _dirty?: boolean;
+}
+
+// ─── Dexie Database (browser-only) ───────────────────────────────────────────
+// IMPORTANT: Dexie uses IndexedDB which is a browser-only API.
+// The class definition and instantiation MUST NOT run on the server.
+// We use a dynamic type alias so TypeScript is satisfied on both sides.
+
+// Minimal Table interface for server-side type compatibility
+export interface MinimalTable<T, K> {
+  get(key: K): Promise<T | undefined>;
+  put(item: T): Promise<K>;
+  add(item: T): Promise<K>;
+  update(key: K, changes: Partial<T>): Promise<number>;
+  delete(key: K): Promise<void>;
+  toArray(): Promise<T[]>;
+  toCollection(): { modify(fn: (item: T) => void): Promise<number> };
+  count(): Promise<number>;
+  where(index: string): { equals(val: any): any; anyOf(vals: any[]): any; above(val: any): any; below(val: any): any; startsWith(val: string): any };
+  bulkGet(keys: K[]): Promise<(T | undefined)[]>;
+  bulkPut(items: T[]): Promise<K>;
+  bulkDelete(keys: K[]): Promise<void>;
+  orderBy(index: string): any;
+  filter(fn: (item: T) => boolean): any;
+}
+
+export interface GVDatabaseType {
+  profiles: MinimalTable<DBProfile, string>;
+  vehicles: MinimalTable<DBVehicle, string>;
+  materials: MinimalTable<DBMaterial, string>;
+  inspections: MinimalTable<DBInspection, string>;
+  sync_queue: MinimalTable<DBSyncQueueItem, number>;
+  sync_meta: MinimalTable<DBSyncMeta, string>;
+  error_logs: MinimalTable<DBErrorLog, string>;
+  vehicle_brands: MinimalTable<DBVehicleBrand, string>;
+  vehicle_documents: MinimalTable<DBVehicleDocument, string>;
+  trabajos: MinimalTable<DBTrabajo, string>;
+  herramientas: MinimalTable<DBHerramienta, string>;
+}
+
+// Singleton instance — only created in browser
+let _db: GVDatabaseType | null = null;
+
+export function getDB(): GVDatabaseType {
+  if (typeof window === 'undefined') {
+    // SSR / serverless: return a no-op stub so callers don't crash.
+    // All operations return empty/default values.
+    const noopTable: MinimalTable<any, any> = {
+      get: async () => undefined,
+      put: async () => '',
+      add: async () => '',
+      update: async () => 0,
+      delete: async () => {},
+      toArray: async () => [],
+      toCollection: () => ({ modify: async () => 0 }),
+      count: async () => 0,
+      where: () => {
+        const chain: any = {
+          equals: () => chain,
+          anyOf: () => chain,
+          above: () => chain,
+          below: () => chain,
+          startsWith: () => chain,
+          and: () => chain,
+          toArray: async () => [],
+          first: async () => undefined,
+          count: async () => 0,
+          delete: async () => 0,
+          reverse: () => chain,
+          sortBy: async () => [],
+          limit: () => chain,
+          offset: () => chain,
+          modify: async () => 0,
+        };
+        return chain;
+      },
+      bulkPut: async () => '',
+      bulkGet: async () => [],
+      bulkDelete: async () => {},
+      orderBy: () => ({ reverse: () => ({ toArray: async () => [] }), toArray: async () => [] }),
+      filter: () => ({ toArray: async () => [], first: async () => undefined }),
+    };
+    return {
+      profiles: noopTable,
+      vehicles: noopTable,
+      materials: noopTable,
+      inspections: noopTable,
+      sync_queue: noopTable,
+      sync_meta: noopTable,
+      error_logs: noopTable,
+      vehicle_brands: noopTable,
+      vehicle_documents: noopTable,
+      trabajos: noopTable,
+      herramientas: noopTable,
+    };
   }
+
+  if (!_db) {
+    // Dynamic require so the Dexie module is never evaluated during SSR.
+    // The webpack externals config excludes dexie from server bundles entirely.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const Dexie = require('dexie').default ?? require('dexie');
+
+    class GVDatabase extends Dexie {
+      profiles!: any;
+      vehicles!: any;
+      materials!: any;
+      inspections!: any;
+      sync_queue!: any;
+      sync_meta!: any;
+      error_logs!: any;
+      vehicle_brands!: any;
+      vehicle_documents!: any;
+      trabajos!: any;
+      herramientas!: any;
+
+      constructor() {
+        super('gv_enterprise_db');
+
+        this.version(1).stores({
+          profiles: 'id, email, role, is_active, updated_at',
+          vehicles: 'id, placa, marca, propietario, created_by, updated_at, _dirty',
+          materials: 'id, nombre, categoria, updated_at, _dirty',
+          inspections: 'id, placa, inspector_id, status, updated_at, local_id, _dirty',
+          sync_queue: '++id, table_name, operation, record_id, status, created_at',
+          sync_meta: 'id',
+        });
+
+        this.version(2).stores({
+          profiles: 'id, email, role, is_active, updated_at',
+          vehicles: 'id, placa, marca, propietario, created_by, updated_at, _dirty',
+          materials: 'id, nombre, categoria, updated_at, _dirty',
+          inspections: 'id, placa, inspector_id, status, updated_at, local_id, _dirty',
+          sync_queue: '++id, table_name, operation, record_id, status, created_at',
+          sync_meta: 'id',
+          error_logs: 'id, level, created_at, context',
+        });
+
+        this.version(3)
+          .stores({
+            profiles: 'id, email, role, is_active, updated_at',
+            vehicles: 'id, placa, marca, propietario, created_by, updated_at, _dirty',
+            materials: 'id, nombre, categoria, updated_at, _dirty',
+            inspections: 'id, placa, inspector_id, status, updated_at, local_id, _dirty, sync_status',
+            sync_queue: '++id, table_name, operation, record_id, status, created_at',
+            sync_meta: 'id',
+            error_logs: 'id, level, created_at, context',
+          })
+          .upgrade(async (tx: any) => {
+            await tx
+              .table('inspections')
+              .toCollection()
+              .modify((insp: DBInspection) => {
+                if (insp.version === undefined) insp.version = 1;
+                if (insp.base_version === undefined) insp.base_version = insp.version;
+              });
+          });
+
+        this.version(4).stores({
+          profiles: 'id, email, role, is_active, updated_at',
+          vehicles: 'id, placa, marca, propietario, created_by, updated_at, _dirty',
+          materials: 'id, nombre, categoria, updated_at, _dirty',
+          inspections: 'id, placa, inspector_id, status, updated_at, local_id, _dirty, sync_status',
+          sync_queue: '++id, table_name, operation, record_id, status, created_at',
+          sync_meta: 'id',
+          error_logs: 'id, level, created_at, context',
+          vehicle_brands: 'id, nombre, categoria, activo',
+          vehicle_documents: 'id, vehicle_id, tipo, estado, updated_at, _dirty',
+          trabajos: 'id, vehicle_id, estado, updated_at, _dirty',
+          herramientas: 'id, nombre, categoria, estado, updated_at, _dirty',
+        });
+      }
+    }
+
+    _db = new GVDatabase() as unknown as GVDatabaseType;
+  }
+
   return _db;
 }
 
@@ -218,3 +418,18 @@ export async function setLastSync(tableName: string, timestamp: number): Promise
     // silently fail
   }
 }
+
+function DBProductionOrder(...args: any[]): any {
+  // eslint-disable-next-line no-console
+  console.warn('Placeholder: DBProductionOrder is not implemented yet.', args);
+  return null;
+}
+
+export { DBProductionOrder };
+function DBProductionOrderItem(...args: any[]): any {
+  // eslint-disable-next-line no-console
+  console.warn('Placeholder: DBProductionOrderItem is not implemented yet.', args);
+  return null;
+}
+
+export { DBProductionOrderItem };

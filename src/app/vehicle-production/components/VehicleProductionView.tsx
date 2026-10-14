@@ -1,24 +1,48 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import Icon from '@/components/ui/AppIcon';
-import VehicleProductionForm from './VehicleProductionForm';
-import ConfirmModal from '@/components/ui/ConfirmModal';
-import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { VehiclesRepo } from '@/lib/repositories';
+import { createClient } from '@/lib/supabase/client';
 
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { queryKeys } from '@/lib/queryClient';
+type TrabajoEstado = 'pendiente' | 'en_ejecucion' | 'finalizado';
+
+interface TrabajoRow {
+  id: string;
+  descripcion: string;
+  parte: string;
+  estado: TrabajoEstado;
+  fecha_inicio: string | null;
+  fecha_fin: string | null;
+  responsable: string | null;
+  avance: number;
+  vehicle_id: string;
+  placa?: string;
+  marca?: string;
+  modelo?: string;
+}
+
+const ESTADO_CONFIG: Record<TrabajoEstado, { label: string; color: string; bg: string; icon: string }> = {
+  pendiente:    { label: 'Pendiente',    color: '#d97706', bg: '#fef3c7', icon: 'ClockIcon' },
+  en_ejecucion: { label: 'En ejecución', color: '#2563eb', bg: '#dbeafe', icon: 'PlayIcon' },
+  finalizado:   { label: 'Finalizado',   color: '#16a34a', bg: '#dcfce7', icon: 'CheckCircleIcon' },
+};
+
+function formatDate(d: string | null) {
+  if (!d) return '—';
+  try {
+    const dt = new Date(d);
+    return dt.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  } catch { return d; }
+}
 
 export default function VehicleProductionView() {
   const { isAdmin, loading: authLoading } = useAuth();
   const router = useRouter();
-  const queryClient = useQueryClient();
+  const [trabajos, setTrabajos] = useState<TrabajoRow[]>([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [filterEstado, setFilterEstado] = useState<TrabajoEstado | 'todos'>('todos');
 
   useEffect(() => {
     if (!authLoading && !isAdmin) {
@@ -26,45 +50,71 @@ export default function VehicleProductionView() {
     }
   }, [authLoading, isAdmin, router]);
 
-  // Read from IndexedDB via TanStack Query
-  const { data: vehicles = [], isLoading } = useQuery({
-    queryKey: queryKeys.vehicles.list(),
-    queryFn: () => VehiclesRepo.getAll(),
-    enabled: !authLoading && isAdmin,
-    staleTime: 5 * 60 * 1000,
+  useEffect(() => {
+    if (authLoading || !isAdmin) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const supabase = createClient();
+        // Join trabajos with vehicles to get placa/marca/modelo
+        const { data, error } = await supabase
+          .from('trabajos')
+          .select(`
+            id, descripcion, parte, estado, fecha_inicio, fecha_fin, responsable, avance, vehicle_id,
+            vehicles (placa, marca, modelo)
+          `)
+          .order('created_at', { ascending: false });
+
+        if (!cancelled && !error && data) {
+          const rows: TrabajoRow[] = (data as unknown as Array<{
+            id: string; descripcion: string; parte: string; estado: TrabajoEstado;
+            fecha_inicio: string | null; fecha_fin: string | null; responsable: string | null;
+            avance: number; vehicle_id: string;
+            vehicles: { placa?: string; marca?: string; modelo?: string } | null;
+          }>).map((r) => ({
+            id: r.id,
+            descripcion: r.descripcion,
+            parte: r.parte,
+            estado: r.estado,
+            fecha_inicio: r.fecha_inicio,
+            fecha_fin: r.fecha_fin,
+            responsable: r.responsable,
+            avance: r.avance ?? 0,
+            vehicle_id: r.vehicle_id,
+            placa: r.vehicles?.placa,
+            marca: r.vehicles?.marca,
+            modelo: r.vehicles?.modelo,
+          }));
+          setTrabajos(rows);
+        }
+      } catch {
+        // silently fail — read-only view
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [authLoading, isAdmin]);
+
+  const filtered = trabajos.filter((t) => {
+    const matchEstado = filterEstado === 'todos' || t.estado === filterEstado;
+    const q = search.toLowerCase();
+    const matchSearch = !q ||
+      (t.placa || '').toLowerCase().includes(q) ||
+      (t.descripcion || '').toLowerCase().includes(q) ||
+      (t.parte || '').toLowerCase().includes(q) ||
+      (t.responsable || '').toLowerCase().includes(q);
+    return matchEstado && matchSearch;
   });
 
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => VehiclesRepo.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all });
-      toast.success('Vehículo eliminado');
-      setDeleteId(null);
-    },
-    onError: () => {
-      toast.error('Error al eliminar vehículo');
-    },
-  });
-
-  const handleFormClose = () => {
-    setShowForm(false);
-    setEditingId(null);
-    queryClient.invalidateQueries({ queryKey: queryKeys.vehicles.all });
+  const counts = {
+    pendiente: trabajos.filter((t) => t.estado === 'pendiente').length,
+    en_ejecucion: trabajos.filter((t) => t.estado === 'en_ejecucion').length,
+    finalizado: trabajos.filter((t) => t.estado === 'finalizado').length,
   };
 
-  const handleDelete = () => {
-    if (!deleteId) return;
-    deleteMutation.mutate(deleteId);
-  };
-
-  const filtered = vehicles.filter(
-    (v) =>
-      v.placa?.toLowerCase().includes(search.toLowerCase()) ||
-      v.marca?.toLowerCase().includes(search.toLowerCase()) ||
-      v.propietario?.toLowerCase().includes(search.toLowerCase())
-  );
-
-  if (authLoading || isLoading) {
+  if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="animate-spin w-8 h-8 border-4 border-[#1B4F72] border-t-transparent rounded-full" />
@@ -76,114 +126,132 @@ export default function VehicleProductionView() {
 
   return (
     <div className="px-4 py-4 max-w-screen-2xl mx-auto">
+      {/* Info banner */}
+      <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-3 flex items-start gap-2">
+        <Icon name="InformationCircleIcon" size={16} className="text-blue-600 flex-shrink-0 mt-0.5" />
+        <p className="text-xs text-blue-700 font-medium">
+          Vista de seguimiento de trabajos — solo lectura. Para crear o editar trabajos, usa la pestaña <strong>Trabajo</strong> dentro de una inspección.
+        </p>
+      </div>
+
       {/* Stats */}
       <div className="grid grid-cols-3 gap-3 mb-5">
         <div className="card p-3 text-center">
-          <p className="text-2xl font-bold text-[#1B4F72] tabular-nums">{vehicles.length}</p>
-          <p className="text-xs text-gray-500 font-semibold mt-0.5">Total</p>
+          <p className="text-2xl font-bold text-yellow-600 tabular-nums">{counts.pendiente}</p>
+          <p className="text-xs text-gray-500 font-semibold mt-0.5">Pendientes</p>
         </div>
         <div className="card p-3 text-center">
-          <p className="text-2xl font-bold text-green-600 tabular-nums">
-            {vehicles.filter((v) => (v as unknown as Record<string, unknown>).status === 'completado').length}
-          </p>
-          <p className="text-xs text-gray-500 font-semibold mt-0.5">Completados</p>
+          <p className="text-2xl font-bold text-blue-600 tabular-nums">{counts.en_ejecucion}</p>
+          <p className="text-xs text-gray-500 font-semibold mt-0.5">En ejecución</p>
         </div>
         <div className="card p-3 text-center">
-          <p className="text-2xl font-bold text-yellow-600 tabular-nums">
-            {vehicles.filter((v) => (v as unknown as Record<string, unknown>).status !== 'completado').length}
-          </p>
-          <p className="text-xs text-gray-500 font-semibold mt-0.5">En Proceso</p>
+          <p className="text-2xl font-bold text-green-600 tabular-nums">{counts.finalizado}</p>
+          <p className="text-xs text-gray-500 font-semibold mt-0.5">Finalizados</p>
         </div>
       </div>
 
-      {/* Search + New */}
-      <div className="flex gap-3 mb-4">
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="flex-1 relative">
           <Icon name="MagnifyingGlassIcon" size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             type="text"
-            placeholder="Buscar por placa, marca..."
+            placeholder="Buscar por placa, trabajo, parte, responsable..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-4 py-3 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1B4F72]"
           />
         </div>
-        <button
-          onClick={() => { setEditingId(null); setShowForm(true); }}
-          className="btn-primary flex items-center gap-2 whitespace-nowrap"
+        <select
+          value={filterEstado}
+          onChange={(e) => setFilterEstado(e.target.value as TrabajoEstado | 'todos')}
+          className="py-3 px-4 border border-gray-200 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#1B4F72]"
         >
-          <Icon name="PlusIcon" size={18} className="text-white" />
-          <span className="hidden sm:inline">Nuevo</span>
-        </button>
+          <option value="todos">Todos los estados</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="en_ejecucion">En ejecución</option>
+          <option value="finalizado">Finalizado</option>
+        </select>
       </div>
 
       {/* List */}
       <div className="space-y-3">
         {filtered.length === 0 && (
           <div className="card p-10 text-center">
-            <Icon name="TruckIcon" size={48} className="text-gray-300 mx-auto mb-3" />
-            <p className="font-semibold text-gray-500">No hay vehículos en producción</p>
-            <p className="text-sm text-gray-400 mt-1">Registra el primer vehículo para comenzar</p>
-            <button onClick={() => setShowForm(true)} className="btn-primary mt-4 mx-auto">
-              Nuevo Vehículo
-            </button>
+            <Icon name="WrenchScrewdriverIcon" size={48} className="text-gray-300 mx-auto mb-3" />
+            <p className="font-semibold text-gray-500">
+              {trabajos.length === 0 ? 'No hay trabajos registrados aún' : 'Sin resultados para los filtros aplicados'}
+            </p>
+            <p className="text-sm text-gray-400 mt-1">
+              {trabajos.length === 0
+                ? 'Los trabajos se crean desde la sección Trabajo dentro de una inspección.' :'Prueba con otros filtros o términos de búsqueda.'}
+            </p>
           </div>
         )}
-        {filtered.map((vehicle) => (
-          <div key={vehicle.id} className="card p-4">
-            <div className="flex items-start justify-between mb-2">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-lg font-bold text-[#1B4F72]">{vehicle.placa}</span>
-                  <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
-                    {vehicle.marca}
-                  </span>
-                  {vehicle._dirty && (
-                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">
-                      Pendiente sync
-                    </span>
+        {filtered.map((trabajo) => {
+          const cfg = ESTADO_CONFIG[trabajo.estado] || ESTADO_CONFIG.pendiente;
+          return (
+            <div key={trabajo.id} className="card p-4">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <span className="text-base font-bold text-[#1B4F72]">{trabajo.placa || 'S/P'}</span>
+                    {trabajo.marca && (
+                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">
+                        {trabajo.marca} {trabajo.modelo}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm font-semibold text-gray-800 truncate">{trabajo.descripcion}</p>
+                  {trabajo.parte && (
+                    <p className="text-xs text-gray-500 mt-0.5">Parte: {trabajo.parte}</p>
                   )}
                 </div>
-                <p className="text-sm font-semibold text-gray-700">{vehicle.modelo} — {vehicle.color}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{vehicle.propietario}</p>
+                <span
+                  className="flex-shrink-0 text-xs font-bold px-2.5 py-1 rounded-full"
+                  style={{ color: cfg.color, backgroundColor: cfg.bg }}
+                >
+                  {cfg.label}
+                </span>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <span className="text-xs text-gray-400">{vehicle.fecha_creacion}</span>
-                <span className="text-xs text-gray-400">{(vehicle.materials as unknown[])?.length || 0} material(es)</span>
+
+              {/* Progress bar */}
+              <div className="mb-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-gray-500">Avance</span>
+                  <span className="text-xs font-bold text-gray-700">{trabajo.avance ?? 0}%</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2">
+                  <div
+                    className="h-2 rounded-full transition-all"
+                    style={{
+                      width: `${trabajo.avance ?? 0}%`,
+                      backgroundColor: cfg.color,
+                    }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-gray-500">
+                <div>
+                  <span className="font-semibold text-gray-600">Inicio:</span>{' '}
+                  {formatDate(trabajo.fecha_inicio)}
+                </div>
+                <div>
+                  <span className="font-semibold text-gray-600">Fin:</span>{' '}
+                  {formatDate(trabajo.fecha_fin)}
+                </div>
+                {trabajo.responsable && (
+                  <div className="col-span-2 sm:col-span-1">
+                    <span className="font-semibold text-gray-600">Responsable:</span>{' '}
+                    {trabajo.responsable}
+                  </div>
+                )}
               </div>
             </div>
-            <div className="flex gap-2 mt-3">
-              <button
-                onClick={() => { setEditingId(vehicle.id); setShowForm(true); }}
-                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#1B4F72] text-white text-sm font-semibold active:scale-95 transition-all"
-              >
-                <Icon name="PencilSquareIcon" size={16} className="text-white" />
-                Editar
-              </button>
-              <button
-                onClick={() => setDeleteId(vehicle.id)}
-                className="flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-semibold active:scale-95 transition-all hover:bg-red-100"
-              >
-                <Icon name="TrashIcon" size={16} className="text-red-500" />
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-
-      {showForm && (
-        <VehicleProductionForm vehicleId={editingId} onClose={handleFormClose} />
-      )}
-
-      <ConfirmModal
-        isOpen={!!deleteId}
-        title="Eliminar Vehículo"
-        message="¿Estás seguro de que deseas eliminar este vehículo? Esta acción no se puede deshacer."
-        confirmLabel="Eliminar"
-        onConfirm={handleDelete}
-        onCancel={() => setDeleteId(null)}
-        variant="danger"
-      />
     </div>
   );
 }

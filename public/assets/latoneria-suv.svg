@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 400" width="1000" height="400" preserveAspectRatio="xMidYMid meet">
+  <!-- SUV Latonería — Vista Lateral Izquierda -->
+  <!-- Paleta: body=#e2e8f0 bodyStroke=#64748b glass=#bae6fd glassStroke=#38bdf8 -->
+  <!-- wheel=#1e293b wheelRim=#475569 pillar=#475569 detail=#94a3b8 -->
+  <!-- headlight=#fef08a taillight=#fca5a5 chassis=#64748b label=#334155 bg=#f8fafc -->
+
+  <!-- BODY LOWER PANEL: x=30..970, y=220..290 -->
+  <rect x="30" y="220" width="940" height="70" fill="#e2e8f0" stroke="#64748b" stroke-width="2"/>
+
+  <!-- HOOD: front bumper face x=30..60 -->
+  <rect x="30" y="220" width="30" height="70" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5"/>
+  <!-- Hood surface trapezoid -->
+  <path d="M60 220 L330 185 L330 220 Z" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5"/>
+  <!-- Hood top edge -->
+  <line x1="60" y1="220" x2="330" y2="185" stroke="#64748b" stroke-width="2"/>
+
+  <!-- WINDSHIELD: x=330..540, y=185..30 -->
+  <path d="M330 185 L450 30 L540 30 L540 185 Z" fill="#bae6fd" stroke="#38bdf8" stroke-width="1.5"/>
+  <!-- A-pillar -->
+  <line x1="330" y1="185" x2="450" y2="30" stroke="#475569" stroke-width="3"/>
+
+  <!-- ROOF: x=450..870, y=28..34 -->
+  <rect x="450" y="28" width="420" height="6" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5"/>
+
+  <!-- REAR WINDOW: x=870..960, y=30..185 -->
+  <path d="M870 30 L960 185 L870 185 Z" fill="#bae6fd" stroke="#38bdf8" stroke-width="1.5"/>
+  <!-- C-pillar -->
+  <line x1="870" y1="30" x2="960" y2="185" stroke="#475569" stroke-width="3"/>
+
+  <!-- REAR HATCH: x=960..970, y=185..290 -->
+  <rect x="960" y="185" width="10" height="105" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5"/>
+  <!-- Rear bumper face -->
+  <rect x="940" y="220" width="30" height="70" fill="#e2e8f0" stroke="#64748b" stroke-width="1.5"/>
+
+  <!-- FULL BODY OUTLINE -->
+  <path d="M30 290 L30 220 L60 220 L330 185 L450 30 L870 30 L960 185 L970 220 L970 290 Z"
+        fill="none" stroke="#64748b" stroke-width="2"/>
+
+  <!-- WAISTLINE: y=185 -->
+  <line x1="330" y1="185" x2="960" y2="185" stroke="#94a3b8" stroke-width="1" stroke-dasharray="6,4"/>
+
+  <!-- FRONT DOOR: x=330..540, y=185..290 -->
+  <rect x="330" y="185" width="210" height="105" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+  <!-- Front door window -->
+  <rect x="340" y="195" width="185" height="80" rx="3" fill="#bae6fd" stroke="#38bdf8" stroke-width="1"/>
+  <!-- Front door handle -->
+  <rect x="490" y="250" width="30" height="7" rx="3" fill="#94a3b8" stroke="#64748b" stroke-width="1"/>
+
+  <!-- REAR DOOR: x=540..760, y=185..290 -->
+  <rect x="540" y="185" width="220" height="105" fill="none" stroke="#94a3b8" stroke-width="1.5"/>
+  <!-- Rear door window -->
+  <rect x="550" y="195" width="195" height="80" rx="3" fill="#bae6fd" stroke="#38bdf8" stroke-width="1"/>
+  <!-- Rear door handle -->
+  <rect x="700" y="250" width="30" height="7" rx="3" fill="#94a3b8" stroke="#64748b" stroke-width="1"/>
+
+  <!-- B-PILLAR at x=540 -->
+  <line x1="540" y1="185" x2="540" y2="290" stroke="#475569" stroke-width="4"/>
+
+  <!-- WHEEL ARCHES: r=80 at y=290 -->
+  <!-- Front arch: center (210, 290) -->
+  <path d="M130 290 A80 80 0 0 1 290 290" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+  <!-- Rear arch: center (750, 290) -->
+  <path d="M670 290 A80 80 0 0 1 830 290" fill="#f8fafc" stroke="#64748b" stroke-width="2"/>
+
+  <!-- FRONT WHEEL: cx=210, cy=300, r=70 -->
+  <circle cx="210" cy="300" r="70" fill="#1e293b" stroke="#334155" stroke-width="2"/>
+  <circle cx="210" cy="300" r="50" fill="#475569" stroke="#1e293b" stroke-width="1.5"/>
+  <circle cx="210" cy="300" r="18" fill="#64748b" stroke="#475569" stroke-width="1"/>
+  <!-- 5 spokes front (calculado a mano: angles 0,72,144,216,288 deg) -->
+  <line x1="228" y1="300" x2="258" y2="300" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+  <line x1="215.6" y1="282.8" x2="224.7" y2="254.6" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+  <line x1="194.4" y1="289.4" x2="179.1" y2="263.1" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+  <line x1="194.4" y1="310.6" x2="179.1" y2="336.9" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+  <line x1="215.6" y1="317.2" x2="224.7" y2="345.4" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- REAR WHEEL: cx=750, cy=300, r=70 -->
+  <circle cx="750" cy="300" r="70" fill="#1e293b" stroke="#334155" stroke-width="2"/>
+  <circle cx="750" cy="300" r="50" fill="#475569" stroke="#1e293b" stroke-width="1.5"/>
+  <circle cx="750" cy="300" r="18" fill="#64748b" stroke="#475569" stroke-width="1"/>
+  <!-- 5 spokes rear -->
+  <line x1="768" y1="300" x2="798" y2="300" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+  <line x1="755.6" y1="282.8" x2="764.7" y2="254.6" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+  <line x1="734.4" y1="289.4" x2="719.1" y2="263.1" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+  <line x1="734.4" y1="310.6" x2="719.1" y2="336.9" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+  <line x1="755.6" y1="317.2" x2="764.7" y2="345.4" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- SIDE MIRROR near A-pillar -->
+  <rect x="295" y="170" width="30" height="18" rx="4" fill="#475569" stroke="#334155" stroke-width="1"/>
+
+  <!-- FRONT HEADLIGHT: x=32..80, y=196..218 -->
+  <rect x="32" y="196" width="48" height="22" rx="3" fill="#fef08a" stroke="#ca8a04" stroke-width="1.5"/>
+
+  <!-- REAR TAIL LIGHT: x=955..969, y=196..218 -->
+  <rect x="955" y="196" width="14" height="22" rx="2" fill="#fca5a5" stroke="#dc2626" stroke-width="1.5"/>
+
+  <!-- ROCKER PANEL / ESTRIBO: x=330..760, y=285..293 -->
+  <rect x="330" y="285" width="430" height="8" rx="3" fill="#94a3b8" stroke="#64748b" stroke-width="1"/>
+
+  <!-- GROUND LINE -->
+  <line x1="30" y1="370" x2="970" y2="370" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4,6"/>
+</svg>

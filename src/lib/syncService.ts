@@ -146,9 +146,6 @@ export async function initialDataDownload(): Promise<{ success: boolean; error?:
     _metrics.endTime = Date.now();
     _metrics.lastSyncDuration = _metrics.endTime - syncStart;
 
-    console.log(
-        `[SyncService] Initial download complete: ${_metrics.downloadedRows} rows in ${_metrics.lastSyncDuration}ms`
-    );
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('gv-sync-complete'));
     return { success: true };
   } catch (err) {
@@ -234,7 +231,6 @@ export async function incrementalSync(
     }
 
     _metrics.downloadedRows += totalDownloaded;
-    console.log(`[SyncService] Incremental sync: ${totalDownloaded} rows updated`);
     if (totalDownloaded > 0 && typeof window !== 'undefined')
       window.dispatchEvent(new Event('gv-sync-complete'));
     return { success: true, downloaded: totalDownloaded };
@@ -262,7 +258,7 @@ export async function processSyncQueue(): Promise<{ synced: number; failed: numb
     const pendingItems = await db.sync_queue
         .where('status')
         .anyOf(['pending', 'failed'])
-        .and((item) => item.retry_count < 5)
+        .and((item: import('@/lib/db').DBSyncQueueItem) => item.retry_count < 5)
         .toArray();
 
     _metrics.pendingQueueSize = pendingItems.length;
@@ -306,7 +302,7 @@ export async function processSyncQueue(): Promise<{ synced: number; failed: numb
     await db.sync_queue
         .where('status')
         .equals('done')
-        .and((item) => item.created_at < cutoff)
+        .and((item: import('@/lib/db').DBSyncQueueItem) => item.created_at < cutoff)
         .delete();
   } catch (err) {
     console.error('[SyncService] Queue processing error:', err);
@@ -619,7 +615,7 @@ export async function enqueueOperation(
         .where('status')
         .anyOf(['pending', 'failed'])
         .and(
-            (item) =>
+            (item: import('@/lib/db').DBSyncQueueItem) =>
                 item.table_name === tableName && item.record_id === recordId && item.retry_count < 5
         )
         .first();
@@ -674,7 +670,7 @@ export async function getPendingQueueCount(): Promise<number> {
   return db.sync_queue
       .where('status')
       .anyOf(['pending', 'failed'])
-      .and((item) => item.retry_count < 5)
+      .and((item: import('@/lib/db').DBSyncQueueItem) => item.retry_count < 5)
       .count();
 }
 

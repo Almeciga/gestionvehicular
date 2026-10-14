@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/lib/supabase/client';
 import AppImage from '@/components/ui/AppImage';
@@ -14,8 +14,13 @@ const bgPatternStyle: React.CSSProperties = {
   backgroundSize: '40px 40px',
 };
 
-export default function LoginPage() {
+function LoginPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Consume searchParams so Next.js knows this component handles dynamic params
+  // This prevents the SSR bailout crash on /login?rk_owner=true
+  const _params = searchParams?.toString();
+  const authError = searchParams?.get('error');
   const { signIn } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -198,6 +203,16 @@ export default function LoginPage() {
           </div>
         </div>
 
+        {/* Auth unavailable error banner */}
+        {authError === 'auth_unavailable' && (
+          <div className="mb-4 bg-red-500/20 border border-red-400/30 rounded-xl px-4 py-3 flex items-center gap-2">
+            <AppIcon name="ExclamationTriangleIcon" size={16} className="text-red-300 flex-shrink-0" />
+            <p className="text-xs text-red-200 font-semibold">
+              Authentication service is temporarily unavailable. Please try again later.
+            </p>
+          </div>
+        )}
+
         {/* Retry countdown banner */}
         {retryCountdown > 0 && (
           <div className="mb-4 bg-amber-500/20 border border-amber-400/30 rounded-xl px-4 py-3 flex items-center gap-2">
@@ -285,6 +300,16 @@ export default function LoginPage() {
                 'Iniciar Sesión'
               )}
             </button>
+
+            {/* Forgot password link */}
+            <div className="text-center">
+              <a
+                href="/forgot-password"
+                className="text-xs text-blue-400 hover:text-blue-300 underline transition-colors"
+              >
+                ¿Olvidaste tu contraseña?
+              </a>
+            </div>
           </form>
         </div>
 
@@ -293,5 +318,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#0a1628] via-[#1B4F72] to-[#0d2137]"><div className="text-white text-sm">Cargando...</div></div>}>
+      <LoginPageInner />
+    </Suspense>
   );
 }

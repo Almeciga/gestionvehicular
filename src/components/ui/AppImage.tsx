@@ -107,10 +107,15 @@ const AppImage = memo(function AppImage({
         );
     }
 
-    const customStyle = {
-        width: props.style?.width ?? (width ? 'auto' : undefined),
-        height: props.style?.height ?? (height ? 'auto' : undefined),
-        ...props.style,
+    // Destructure style out of props so it doesn't override customStyle in the spread below
+    const { style: propsStyle, ...restProps } = props;
+
+    const customStyle: React.CSSProperties = {
+        // Always preserve aspect ratio: if width is given, height should be auto (and vice versa)
+        // This prevents the Next.js "width or height modified but not the other" warning
+        width: propsStyle?.width ?? (width ? 'auto' : undefined),
+        height: propsStyle?.height ?? (height ? 'auto' : undefined),
+        ...propsStyle,
     };
 
     return (
@@ -120,7 +125,7 @@ const AppImage = memo(function AppImage({
             height={height || 300}
             sizes={sizes}
             style={customStyle}
-            {...props}
+            {...restProps}
         />
     );
 });

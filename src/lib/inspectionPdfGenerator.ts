@@ -134,13 +134,6 @@ export function validateVideoDuration(
     video.preload = 'metadata';
     const url = URL.createObjectURL(file);
 
-    const cleanup = () => {
-      URL.revokeObjectURL(url);
-      video.removeEventListener('loadedmetadata', onLoaded);
-      video.removeEventListener('error', onError);
-      signal?.removeEventListener('abort', onAbort);
-    };
-
     const onLoaded = () => {
       cleanup();
       const duration = video.duration;
@@ -163,6 +156,13 @@ export function validateVideoDuration(
     const onAbort = () => {
       cleanup();
       resolve({ valid: false, duration: 0, error: 'Operación cancelada' });
+    };
+
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      video.removeEventListener('loadedmetadata', onLoaded);
+      video.removeEventListener('error', onError);
+      signal?.removeEventListener('abort', onAbort);
     };
 
     video.addEventListener('loadedmetadata', onLoaded);
@@ -226,14 +226,7 @@ async function convertImageToBase64(
     const img = new Image();
     img.crossOrigin = 'anonymous';
 
-    const onAbort = () => {
-      img.removeEventListener('load', onLoad);
-      img.removeEventListener('error', onError);
-      resolve(null);
-    };
-
     const onLoad = () => {
-      signal?.removeEventListener('abort', onAbort);
       try {
         const canvas = document.createElement('canvas');
         const maxW = 1600;
@@ -250,10 +243,17 @@ async function convertImageToBase64(
       } catch {
         resolve(null);
       }
+      signal?.removeEventListener('abort', onAbort);
     };
 
     const onError = () => {
       signal?.removeEventListener('abort', onAbort);
+      resolve(null);
+    };
+
+    const onAbort = () => {
+      img.removeEventListener('load', onLoad);
+      img.removeEventListener('error', onError);
       resolve(null);
     };
 
@@ -1102,7 +1102,7 @@ export async function generateInspectionPDFWithProgress(
 
     onProgress({ stage: 'building', message: 'Construyendo reporte PDF...', percent: 50, totalImages: imageMap.size, loadedImages: imageMap.size - failedCount, failedImages: failedCount });
 
-    const html = generateInspectionHTML(data, imageMap);
+    let html = generateInspectionHTML(data, imageMap);
 
     onProgress({ stage: 'rendering', message: 'Abriendo ventana de impresión...', percent: 90, totalImages: imageMap.size, loadedImages: imageMap.size - failedCount, failedImages: failedCount });
 
@@ -1134,7 +1134,7 @@ export function openPDFInPrintWindow(html: string, filename: string): void {
 // ─── Legacy compatibility export ─────────────────────────────────────────────
 
 export function downloadInspectionPDFFull(data: InspectionPDFData): void {
-  const html = generateInspectionHTML(data, new Map());
+  let html = generateInspectionHTML(data, new Map());
   const filename = `BT-inspeccion-${data.placa.replace(/[^a-zA-Z0-9]/g, '-')}-${data.fecha.replace(/\//g, '-')}.html`;
   openPDFInPrintWindow(html, filename);
 }

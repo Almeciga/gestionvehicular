@@ -400,3 +400,16 @@ export const InspectionsRepo = {
     });
   },
 };
+
+export const POCatalogRepo = {
+  bulkUpsertCatalogs: async (..._args: any[]): Promise<void> => {
+    // Placeholder: IndexedDB catalog cache not implemented yet
+  },
+};
+function ProductionOrdersRepo(...args: any[]): any {
+  // eslint-disable-next-line no-console
+  console.warn('Placeholder: ProductionOrdersRepo is not implemented yet.', args);
+  return null;
+}
+
+export { ProductionOrdersRepo };

@@ -19,7 +19,7 @@ import { InspectionsRepo } from '@/lib/repositories';
 import { EDITABLE_STATUSES, toInspectionView, type InspectionView } from '@/lib/inspectionView';
 import type { DBInspection } from '@/lib/db';
 import { saveDraft, getDraft, deleteDraft } from '@/lib/offlineDB';
-import { queueInspectionMedia } from '../../../lib/inspectionMedia';
+import { queueInspectionMedia } from '@/lib/inspectionMedia';
 import { processSyncQueue } from '@/lib/syncService';
 import { generateInspectionPDFWithProgress, openPDFInPrintWindow, type InspectionPDFData, type PDFGenerationProgress } from '@/lib/inspectionPdfGenerator';
 import { useAuth } from '@/contexts/AuthContext';
@@ -90,12 +90,12 @@ function toDBCreate(payload: InspectionPayload): Omit<DBInspection, '_synced_at'
 // ─── Mandatory photo validation ───────────────────────────────────────────────
 
 function getMissingPhotoItems(
-    accesorios: AccesorioItemPDF[],
-    piezas: ItemConEstadoPDF[],
-    componentes: ItemConEstadoPDF[],
-    mecanica: ItemMecanicaPDF[],
-    latoneria: ZonaVehiculoPDF[],
-    vidrios: VidrioItemPDF[]
+  accesorios: AccesorioItemPDF[],
+  piezas: ItemConEstadoPDF[],
+  componentes: ItemConEstadoPDF[],
+  mecanica: ItemMecanicaPDF[],
+  latoneria: ZonaVehiculoPDF[],
+  vidrios: VidrioItemPDF[]
 ): string[] {
   const missing: string[] = [];
   const checkItems = (items: { nombre: string; estado: string | null; fotos: string[] }[]) => {
@@ -553,27 +553,27 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
 
   const startPdfGeneration = async (pdfData: InspectionPDFData) => {
     await generateInspectionPDFWithProgress(pdfData, (prog) => setPdfProgress(prog))
-        .then((result) => {
-          if (result.success && result.html) {
-            const filename = `BT-inspeccion-${pdfData.placa.replace(/[^a-zA-Z0-9]/g, '-')}-${pdfData.fecha.replace(/\//g, '-')}.html`;
-            openPDFInPrintWindow(result.html, filename);
-            setPdfProgress({ stage: 'done', message: 'PDF generado', percent: 100, totalImages: 0, loadedImages: 0, failedImages: result.failedImages });
-          }
-        })
-        .catch((err: unknown) => {
-          console.error('Error generando PDF:', err instanceof Error ? err.message : err);
-          toast.error('No se pudo generar el PDF. Intenta de nuevo.');
-          setPdfProgress(null);
-        });
+      .then((result) => {
+        if (result.success && result.html) {
+          const filename = `BT-inspeccion-${pdfData.placa.replace(/[^a-zA-Z0-9]/g, '-')}-${pdfData.fecha.replace(/\//g, '-')}.html`;
+          openPDFInPrintWindow(result.html, filename);
+          setPdfProgress({ stage: 'done', message: 'PDF generado', percent: 100, totalImages: 0, loadedImages: 0, failedImages: result.failedImages });
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('Error generando PDF:', err instanceof Error ? err.message : err);
+        toast.error('No se pudo generar el PDF. Intenta de nuevo.');
+        setPdfProgress(null);
+      });
   };
 
   const renderSection = () => {
     if (isReadOnly) {
       return (
-          <div className="relative">
-            <div className="absolute inset-0 z-10 cursor-not-allowed" />
-            <div className="opacity-70 pointer-events-none">{renderSectionContent()}</div>
-          </div>
+        <div className="relative">
+          <div className="absolute inset-0 z-10 cursor-not-allowed" />
+          <div className="opacity-70 pointer-events-none">{renderSectionContent()}</div>
+        </div>
       );
     }
     return renderSectionContent();
@@ -601,222 +601,222 @@ export default function InspectionFormModal({ inspectionId, onClose }: Inspectio
   const currentSection = sections[currentIndex];
 
   return (
-      <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
-        {pdfProgress && (
-            <PdfGenerationModal
-                progress={pdfProgress}
-                onRetry={() => { if (pendingPdfData) { setPdfProgress({ stage: 'preloading', message: 'Reintentando...', percent: 0, totalImages: 0, loadedImages: 0, failedImages: 0 }); startPdfGeneration(pendingPdfData); } }}
-                onClose={() => { setPdfProgress(null); setPendingPdfData(null); }}
-            />
-        )}
+    <div className="fixed inset-0 z-50 bg-gray-50 flex flex-col">
+      {pdfProgress && (
+        <PdfGenerationModal
+          progress={pdfProgress}
+          onRetry={() => { if (pendingPdfData) { setPdfProgress({ stage: 'preloading', message: 'Reintentando...', percent: 0, totalImages: 0, loadedImages: 0, failedImages: 0 }); startPdfGeneration(pendingPdfData); } }}
+          onClose={() => { setPdfProgress(null); setPendingPdfData(null); }}
+        />
+      )}
 
-        {hasDraftRecovery && !inspectionId && (
-            <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex items-center gap-2">
-              <Icon name="CloudArrowDownIcon" size={16} className="text-blue-600 flex-shrink-0" />
-              <p className="text-xs font-semibold text-blue-700 flex-1">Borrador recuperado de sesión anterior</p>
-              <button
-                  onClick={() => {
-                    const draftKey = `draft-new-${profile?.id || 'anon'}`;
-                    getDraft(draftKey).then((draft) => {
-                      if (draft?.data) {
-                        const d = draft.data as Record<string, unknown>;
-                        if (d.datos) {
-                          const datos = d.datos as Record<string, unknown>;
-                          if (datos.accesorios) setAccesorios(datos.accesorios as AccesorioItemPDF[]);
-                          if (datos.piezas) setPiezas(datos.piezas as ItemConEstadoPDF[]);
-                          if (datos.componentes) setComponentes(datos.componentes as ItemConEstadoPDF[]);
-                          if (datos.mecanica) setMecanica(datos.mecanica as ItemMecanicaPDF[]);
-                          if (datos.latoneria) setLatoneria(datos.latoneria as ZonaVehiculoPDF[]);
-                          if (datos.vidrios) setVidrios(datos.vidrios as VidrioItemPDF[]);
-                          if (datos.observaciones) setObservaciones(datos.observaciones as string);
-                          if (datos.video) setVideo(datos.video as VideoPDF);
-                          if (datos.firmas) setFirmas(datos.firmas as FirmasPDF);
-                          if (typeof datos.combustible === 'number') setCombustible(datos.combustible);
-                          if (datos.scanner) setScanner(datos.scanner as ScannerPDF);
-                          if (datos.documentos) setDocumentos(datos.documentos as DocItemPDF[]);
-                          setDatosGenerales((prev) => ({
-                            ...prev,
-                            placa: (datos.placa as string) || prev.placa,
-                            marca: (datos.marca as string) || prev.marca,
-                            modelo: (datos.modelo as string) || prev.modelo,
-                            color: (datos.color as string) || prev.color,
-                            propietario: (datos.propietario as string) || prev.propietario,
-                            vin: (datos.vin as string) || prev.vin,
-                          }));
-                        }
-                        toast.success('Borrador restaurado correctamente');
-                      }
-                      setHasDraftRecovery(false);
-                    });
-                  }}
-                  className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-lg hover:bg-blue-200"
-              >
-                Restaurar
-              </button>
-              <button onClick={() => setHasDraftRecovery(false)} className="text-xs text-blue-500 hover:text-blue-700">Ignorar</button>
-            </div>
-        )}
-
-        <div className="bg-[#1B4F72] text-white px-4 py-3 flex items-center gap-3 shadow-md">
-          <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/10 transition-colors">
-            <Icon name="XMarkIcon" size={22} className="text-white" />
+      {hasDraftRecovery && !inspectionId && (
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2 flex items-center gap-2">
+          <Icon name="CloudArrowDownIcon" size={16} className="text-blue-600 flex-shrink-0" />
+          <p className="text-xs font-semibold text-blue-700 flex-1">Borrador recuperado de sesión anterior</p>
+          <button
+            onClick={() => {
+              const draftKey = `draft-new-${profile?.id || 'anon'}`;
+              getDraft(draftKey).then((draft) => {
+                if (draft?.data) {
+                  const d = draft.data as Record<string, unknown>;
+                  if (d.datos) {
+                    const datos = d.datos as Record<string, unknown>;
+                    if (datos.accesorios) setAccesorios(datos.accesorios as AccesorioItemPDF[]);
+                    if (datos.piezas) setPiezas(datos.piezas as ItemConEstadoPDF[]);
+                    if (datos.componentes) setComponentes(datos.componentes as ItemConEstadoPDF[]);
+                    if (datos.mecanica) setMecanica(datos.mecanica as ItemMecanicaPDF[]);
+                    if (datos.latoneria) setLatoneria(datos.latoneria as ZonaVehiculoPDF[]);
+                    if (datos.vidrios) setVidrios(datos.vidrios as VidrioItemPDF[]);
+                    if (datos.observaciones) setObservaciones(datos.observaciones as string);
+                    if (datos.video) setVideo(datos.video as VideoPDF);
+                    if (datos.firmas) setFirmas(datos.firmas as FirmasPDF);
+                    if (typeof datos.combustible === 'number') setCombustible(datos.combustible);
+                    if (datos.scanner) setScanner(datos.scanner as ScannerPDF);
+                    if (datos.documentos) setDocumentos(datos.documentos as DocItemPDF[]);
+                    setDatosGenerales((prev) => ({
+                      ...prev,
+                      placa: (datos.placa as string) || prev.placa,
+                      marca: (datos.marca as string) || prev.marca,
+                      modelo: (datos.modelo as string) || prev.modelo,
+                      color: (datos.color as string) || prev.color,
+                      propietario: (datos.propietario as string) || prev.propietario,
+                      vin: (datos.vin as string) || prev.vin,
+                    }));
+                  }
+                  toast.success('Borrador restaurado correctamente');
+                }
+                setHasDraftRecovery(false);
+              });
+            }}
+            className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-1 rounded-lg hover:bg-blue-200"
+          >
+            Restaurar
           </button>
-          <div className="flex-1 min-w-0">
-            <h2 className="font-bold text-base truncate">
-              {isFinalized ? '🔒 Inspección Finalizada' : inspectionId ? 'Editar Inspección' : 'Nueva Inspección'}
-            </h2>
-            <div className="flex items-center gap-2">
-              <p className="text-xs text-white/70">{currentSection.label} — {currentIndex + 1}/{sections.length}</p>
-              {existingInspection?.enterpriseId && (
-                  <span className="text-xs font-mono text-white/60">{existingInspection.enterpriseId}</span>
-              )}
-            </div>
+          <button onClick={() => setHasDraftRecovery(false)} className="text-xs text-blue-500 hover:text-blue-700">Ignorar</button>
+        </div>
+      )}
+
+      <div className="bg-[#1B4F72] text-white px-4 py-3 flex items-center gap-3 shadow-md">
+        <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/10 transition-colors">
+          <Icon name="XMarkIcon" size={22} className="text-white" />
+        </button>
+        <div className="flex-1 min-w-0">
+          <h2 className="font-bold text-base truncate">
+            {isFinalized ? '🔒 Inspección Finalizada' : inspectionId ? 'Editar Inspección' : 'Nueva Inspección'}
+          </h2>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-white/70">{currentSection.label} — {currentIndex + 1}/{sections.length}</p>
+            {existingInspection?.enterpriseId && (
+              <span className="text-xs font-mono text-white/60">{existingInspection.enterpriseId}</span>
+            )}
           </div>
-          {lastSaved && !isReadOnly && (
-              <SyncStatusBadge status="synced" compact className="opacity-80" />
-          )}
-          <button
-              onClick={() => handleGeneratePDF()}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors text-white text-xs font-bold"
-              title="Generar PDF completo"
-          >
-            <Icon name="DocumentArrowDownIcon" size={16} className="text-white" />
-            PDF
-          </button>
-          <button
-              onClick={() => setShowSectionMenu(!showSectionMenu)}
-              className="p-2 rounded-xl hover:bg-white/10 transition-colors"
-          >
-            <Icon name="ListBulletIcon" size={22} className="text-white" />
-          </button>
         </div>
+        {lastSaved && !isReadOnly && (
+          <SyncStatusBadge status="synced" compact className="opacity-80" />
+        )}
+        <button
+          onClick={() => handleGeneratePDF()}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/15 hover:bg-white/25 transition-colors text-white text-xs font-bold"
+          title="Generar PDF completo"
+        >
+          <Icon name="DocumentArrowDownIcon" size={16} className="text-white" />
+          PDF
+        </button>
+        <button
+          onClick={() => setShowSectionMenu(!showSectionMenu)}
+          className="p-2 rounded-xl hover:bg-white/10 transition-colors"
+        >
+          <Icon name="ListBulletIcon" size={22} className="text-white" />
+        </button>
+      </div>
 
-        {isFinalized && (
-            <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center gap-2">
-              <Icon name="LockClosedIcon" size={16} className="text-amber-600 flex-shrink-0" />
-              <p className="text-xs font-semibold text-amber-700 flex-1">
-                Inspección finalizada — solo lectura
-                {existingInspection?.finalizationTimestamp && (
-                    <span className="font-normal ml-1">({new Date(existingInspection.finalizationTimestamp).toLocaleString('es-ES')})</span>
-                )}
-              </p>
-              {isAdmin && <span className="text-xs text-amber-600 font-semibold">Admin puede desbloquear desde la lista</span>}
-            </div>
-        )}
-        {isPendingReview && (
-            <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center gap-2">
-              <Icon name="ClockIcon" size={16} className="text-orange-600 flex-shrink-0" />
-              <p className="text-xs font-semibold text-orange-700 flex-1">
-                Enviada a revisión — solo lectura hasta que un administrador la apruebe o la rechace
-              </p>
-            </div>
-        )}
-        {isCompleted && (
-            <div className="bg-green-50 border-b border-green-200 px-4 py-2 flex items-center gap-2">
-              <Icon name="CheckCircleIcon" size={16} className="text-green-600 flex-shrink-0" />
-              <p className="text-xs font-semibold text-green-700 flex-1">
-                Inspección aprobada y completada — solo lectura, pendiente de que un administrador la finalice
-              </p>
-            </div>
-        )}
-        {isArchived && (
-            <div className="bg-purple-50 border-b border-purple-200 px-4 py-2 flex items-center gap-2">
-              <Icon name="ArchiveBoxIcon" size={16} className="text-purple-600 flex-shrink-0" />
-              <p className="text-xs font-semibold text-purple-700 flex-1">Inspección archivada — solo lectura</p>
-            </div>
-        )}
-
-        <div className="h-1 bg-[#1B4F72]/20">
-          <div className="h-1 bg-green-400 transition-all duration-300" style={{ width: `${((currentIndex + 1) / sections.length) * 100}%` }} />
+      {isFinalized && (
+        <div className="bg-amber-50 border-b border-amber-200 px-4 py-2 flex items-center gap-2">
+          <Icon name="LockClosedIcon" size={16} className="text-amber-600 flex-shrink-0" />
+          <p className="text-xs font-semibold text-amber-700 flex-1">
+            Inspección finalizada — solo lectura
+            {existingInspection?.finalizationTimestamp && (
+              <span className="font-normal ml-1">({new Date(existingInspection.finalizationTimestamp).toLocaleString('es-ES')})</span>
+            )}
+          </p>
+          {isAdmin && <span className="text-xs text-amber-600 font-semibold">Admin puede desbloquear desde la lista</span>}
         </div>
+      )}
+      {isPendingReview && (
+        <div className="bg-orange-50 border-b border-orange-200 px-4 py-2 flex items-center gap-2">
+          <Icon name="ClockIcon" size={16} className="text-orange-600 flex-shrink-0" />
+          <p className="text-xs font-semibold text-orange-700 flex-1">
+            Enviada a revisión — solo lectura hasta que un administrador la apruebe o la rechace
+          </p>
+        </div>
+      )}
+      {isCompleted && (
+        <div className="bg-green-50 border-b border-green-200 px-4 py-2 flex items-center gap-2">
+          <Icon name="CheckCircleIcon" size={16} className="text-green-600 flex-shrink-0" />
+          <p className="text-xs font-semibold text-green-700 flex-1">
+            Inspección aprobada y completada — solo lectura, pendiente de que un administrador la finalice
+          </p>
+        </div>
+      )}
+      {isArchived && (
+        <div className="bg-purple-50 border-b border-purple-200 px-4 py-2 flex items-center gap-2">
+          <Icon name="ArchiveBoxIcon" size={16} className="text-purple-600 flex-shrink-0" />
+          <p className="text-xs font-semibold text-purple-700 flex-1">Inspección archivada — solo lectura</p>
+        </div>
+      )}
 
-        {showSectionMenu && (
-            <div className="absolute top-16 right-0 left-0 z-50 bg-white shadow-xl border-b border-gray-100 max-h-80 overflow-y-auto">
-              {sections.map((s, idx) => (
-                  <button
-                      key={`section-menu-${s.id}`}
-                      onClick={() => { setActiveSection(s.id); setShowSectionMenu(false); }}
-                      className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${activeSection === s.id ? 'bg-primary-50 text-[#1B4F72]' : 'text-gray-700'}`}
-                  >
+      <div className="h-1 bg-[#1B4F72]/20">
+        <div className="h-1 bg-green-400 transition-all duration-300" style={{ width: `${((currentIndex + 1) / sections.length) * 100}%` }} />
+      </div>
+
+      {showSectionMenu && (
+        <div className="absolute top-16 right-0 left-0 z-50 bg-white shadow-xl border-b border-gray-100 max-h-80 overflow-y-auto">
+          {sections.map((s, idx) => (
+            <button
+              key={`section-menu-${s.id}`}
+              onClick={() => { setActiveSection(s.id); setShowSectionMenu(false); }}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition-colors ${activeSection === s.id ? 'bg-primary-50 text-[#1B4F72]' : 'text-gray-700'}`}
+            >
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${completedSections.has(s.id) ? 'bg-green-500 text-white' : activeSection === s.id ? 'bg-[#1B4F72] text-white' : 'bg-gray-200 text-gray-500'}`}>
                 {completedSections.has(s.id) ? '✓' : idx + 1}
               </span>
-                    <span className="text-sm font-semibold">{s.label}</span>
-                  </button>
-              ))}
-            </div>
-        )}
-
-        <div className="bg-white border-b border-gray-100 px-4 py-2 overflow-x-auto scrollbar-hide">
-          <div className="flex gap-2 min-w-max">
-            {sections.map((s) => (
-                <button
-                    key={`tab-${s.id}`}
-                    onClick={() => setActiveSection(s.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
-                        activeSection === s.id ? 'bg-[#1B4F72] text-white' :
-                            completedSections.has(s.id) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
-                    }`}
-                >
-                  {completedSections.has(s.id) && activeSection !== s.id && <Icon name="CheckIcon" size={12} className="text-green-600" />}
-                  {s.label}
-                </button>
-            ))}
-          </div>
+              <span className="text-sm font-semibold">{s.label}</span>
+            </button>
+          ))}
         </div>
+      )}
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="px-4 py-4 max-w-screen-2xl mx-auto">
-            {renderSection()}
-          </div>
-        </div>
-
-        <div className="bg-white border-t border-gray-100 px-4 py-3 flex gap-2">
-          <button
-              onClick={goPrev}
-              disabled={currentIndex === 0}
-              className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-100 text-gray-600 font-semibold text-sm disabled:opacity-40 active:scale-95 transition-all"
-          >
-            <Icon name="ChevronLeftIcon" size={18} className="text-gray-600" />
-            Ant.
-          </button>
-          <div className="flex-1" />
-          {!isReadOnly && currentIndex < sections.length - 1 && (
-              <button onClick={goNext} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[#1B4F72] text-white font-semibold text-sm active:scale-95 transition-all">
-                Sig.
-                <Icon name="ChevronRightIcon" size={18} className="text-white" />
-              </button>
-          )}
-          {!isReadOnly && currentIndex === sections.length - 1 && (
-              <>
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-600 text-white font-semibold text-sm active:scale-95 transition-all disabled:opacity-60"
-                >
-                  {saving ? <Icon name="ArrowPathIcon" size={16} className="text-white animate-spin" /> : <Icon name="CloudArrowUpIcon" size={16} className="text-white" />}
-                  Guardar
-                </button>
-                <button
-                    onClick={handleSubmitForReview}
-                    disabled={submitting}
-                    className="flex items-center gap-2 px-4 py-3 rounded-xl bg-green-600 text-white font-semibold text-sm active:scale-95 transition-all disabled:opacity-60"
-                >
-                  {submitting ? <Icon name="ArrowPathIcon" size={16} className="text-white animate-spin" /> : <Icon name="PaperAirplaneIcon" size={16} className="text-white" />}
-                  Enviar a Revisión
-                </button>
-              </>
-          )}
-          {isReadOnly && (
-              <button
-                  onClick={() => handleGeneratePDF()}
-                  className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[#1B4F72] text-white font-semibold text-sm active:scale-95 transition-all"
-              >
-                <Icon name="DocumentArrowDownIcon" size={16} className="text-white" />
-                Descargar PDF
-              </button>
-          )}
+      <div className="bg-white border-b border-gray-100 px-4 py-2 overflow-x-auto scrollbar-hide">
+        <div className="flex gap-2 min-w-max">
+          {sections.map((s) => (
+            <button
+              key={`tab-${s.id}`}
+              onClick={() => setActiveSection(s.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-all ${
+                activeSection === s.id ? 'bg-[#1B4F72] text-white' :
+                  completedSections.has(s.id) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'
+              }`}
+            >
+              {completedSections.has(s.id) && activeSection !== s.id && <Icon name="CheckIcon" size={12} className="text-green-600" />}
+              {s.label}
+            </button>
+          ))}
         </div>
       </div>
+
+      <div className="flex-1 overflow-y-auto">
+        <div className="px-4 py-4 max-w-screen-2xl mx-auto">
+          {renderSection()}
+        </div>
+      </div>
+
+      <div className="bg-white border-t border-gray-100 px-4 py-3 flex gap-2">
+        <button
+          onClick={goPrev}
+          disabled={currentIndex === 0}
+          className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-100 text-gray-600 font-semibold text-sm disabled:opacity-40 active:scale-95 transition-all"
+        >
+          <Icon name="ChevronLeftIcon" size={18} className="text-gray-600" />
+          Ant.
+        </button>
+        <div className="flex-1" />
+        {!isReadOnly && currentIndex < sections.length - 1 && (
+          <button onClick={goNext} className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[#1B4F72] text-white font-semibold text-sm active:scale-95 transition-all">
+            Sig.
+            <Icon name="ChevronRightIcon" size={18} className="text-white" />
+          </button>
+        )}
+        {!isReadOnly && currentIndex === sections.length - 1 && (
+          <>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center gap-2 px-4 py-3 rounded-xl bg-gray-600 text-white font-semibold text-sm active:scale-95 transition-all disabled:opacity-60"
+            >
+              {saving ? <Icon name="ArrowPathIcon" size={16} className="text-white animate-spin" /> : <Icon name="CloudArrowUpIcon" size={16} className="text-white" />}
+              Guardar
+            </button>
+            <button
+              onClick={handleSubmitForReview}
+              disabled={submitting}
+              className="flex items-center gap-2 px-4 py-3 rounded-xl bg-green-600 text-white font-semibold text-sm active:scale-95 transition-all disabled:opacity-60"
+            >
+              {submitting ? <Icon name="ArrowPathIcon" size={16} className="text-white animate-spin" /> : <Icon name="PaperAirplaneIcon" size={16} className="text-white" />}
+              Enviar a Revisión
+            </button>
+          </>
+        )}
+        {isReadOnly && (
+          <button
+            onClick={() => handleGeneratePDF()}
+            className="flex items-center gap-2 px-4 py-3 rounded-xl bg-[#1B4F72] text-white font-semibold text-sm active:scale-95 transition-all"
+          >
+            <Icon name="DocumentArrowDownIcon" size={16} className="text-white" />
+            Descargar PDF
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
